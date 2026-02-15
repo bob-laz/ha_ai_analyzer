@@ -55,7 +55,12 @@ services:
       RETRY_BACKPRESSURE_DELAY_MS: 250
       COLLECTOR_INSTANCE_ID: collector-local
       LOG_LEVEL: info
-    command: ["yarn", "workspace", "@ha-ai/collector", "start:collector"]
+    command:
+      [
+        "/bin/sh",
+        "-lc",
+        "yarn workspace @ha-ai/tools start:retention --schedule & yarn workspace @ha-ai/collector start:collector",
+      ]
     working_dir: /app
     volumes:
       - ./:/app

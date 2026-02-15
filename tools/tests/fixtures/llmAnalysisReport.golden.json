@@ -1,0 +1,63 @@
+{
+  "reportType": "llm_analysis",
+  "runId": "run-uuid-1",
+  "generatedAt": "2026-01-02T01:00:00.000Z",
+  "window": {
+    "start": "2026-01-01T01:00:00.000Z",
+    "end": "2026-01-02T01:00:00.000Z",
+    "timezone": "UTC",
+    "hours": 24
+  },
+  "dailySummary": {
+    "day": "2026-01-02",
+    "timezone": "UTC",
+    "totalEvents": 8,
+    "uniqueEntities": 2,
+    "stateChanges": 4,
+    "serviceCalls": 4
+  },
+  "topChanges": {
+    "window": {
+      "start": "2026-01-01T01:00:00.000Z",
+      "end": "2026-01-02T01:00:00.000Z"
+    },
+    "limit": 20,
+    "rows": [
+      {
+        "subjectType": "service",
+        "subjectId": "light.turn_on",
+        "currentCount": 4,
+        "previousCount": 1,
+        "delta": 3
+      }
+    ]
+  },
+  "rankedInsights": [
+    {
+      "rank": 1,
+      "category": "automation",
+      "title": "Light turn_on usage increased",
+      "summary": "Service calls increased in the latest window.",
+      "rootCause": "Automation burst in living room profile",
+      "confidence": 0.9,
+      "severity": 0.6,
+      "evidenceIds": ["change:service:light.turn_on", "event:101"]
+    }
+  ],
+  "proposedAutomationChanges": [
+    {
+      "automationId": "automation.living_room_evening",
+      "changeType": "adjust_trigger",
+      "reasoning": "Reduce unnecessary trigger fan-out",
+      "proposedYamlPatch": null,
+      "estimatedImpact": null,
+      "relatedInsightRank": 1
+    }
+  ],
+  "summary": "Focused analysis summary",
+  "truncation": {
+    "maxEventsPerContext": 60,
+    "truncatedContexts": [],
+    "totalDroppedEvents": 0
+  }
+}

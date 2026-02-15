@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "lint:type": "tsc -p tsconfig.json --noEmit",
     "start:analytics": "tsx src/analyticsJob.ts",
+    "start:retention": "tsx src/retentionJob.ts",
     "test": "vitest run"
   },
   "dependencies": {

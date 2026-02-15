@@ -31,7 +31,9 @@ describe.skipIf(!shouldRun)('collector integration', () => {
         received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
-    await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_events_dedupe_key_unique_test ON events (dedupe_key)');
+    await pool.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_events_event_time_dedupe_key_unique_test ON events (event_time, dedupe_key)',
+    );
     await pool.query('TRUNCATE TABLE events RESTART IDENTITY CASCADE');
   });
 

@@ -4,10 +4,20 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# Load repo-local .env values for host-run collector workflows.
+# This keeps local onboarding ergonomic while still allowing explicit shell exports.
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/.env"
+  set +a
+fi
+
 MODE=""
 WITH_DEMO_EVENTS=0
 DEV_HA_AUTO_BOOTSTRAP="${DEV_HA_AUTO_BOOTSTRAP:-true}"
 DEV_HA_TOKEN_FILE="${DEV_HA_TOKEN_FILE:-.dev-ha.token}"
+RETENTION_AUTOSTART="${RETENTION_AUTOSTART:-true}"
 TOKEN_SOURCE="unset"
 
 if [[ -n "${HA_TOKEN:-}" ]]; then
@@ -218,6 +228,14 @@ echo "Collector mode: $MODE"
 echo "Collector HA websocket target: $HA_WS_URL"
 
 DEMO_PID=""
+RETENTION_PID=""
+
+if is_truthy "$RETENTION_AUTOSTART"; then
+  echo "Starting retention scheduler alongside collector..."
+  yarn workspace @ha-ai/tools start:retention --schedule &
+  RETENTION_PID="$!"
+fi
+
 if [[ "$WITH_DEMO_EVENTS" -eq 1 ]]; then
   if [[ "$MODE" != "dev-ha" ]]; then
     echo "--with-demo-events is only supported with --mode=dev-ha." >&2
@@ -229,6 +247,9 @@ if [[ "$WITH_DEMO_EVENTS" -eq 1 ]]; then
 fi
 
 cleanup() {
+  if [[ -n "$RETENTION_PID" ]]; then
+    kill "$RETENTION_PID" >/dev/null 2>&1 || true
+  fi
   if [[ -n "$DEMO_PID" ]]; then
     kill "$DEMO_PID" >/dev/null 2>&1 || true
   fi

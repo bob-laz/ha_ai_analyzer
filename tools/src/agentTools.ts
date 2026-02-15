@@ -62,6 +62,87 @@ export type TraceContextResult = {
   events: TraceContextEvent[];
 };
 
+export type EntityTimelineGranularity = 'minute' | 'hour' | 'day';
+
+export type EntityTimelineBucket = {
+  bucketStart: string;
+  totalEvents: number;
+  stateChanges: number;
+  serviceCalls: number;
+};
+
+export type EntityTimelineResult = {
+  entityId: string;
+  window: TimeWindow;
+  granularity: EntityTimelineGranularity;
+  buckets: EntityTimelineBucket[];
+};
+
+export type CorrelationRow = {
+  subjectType: 'entity' | 'service';
+  subjectId: string;
+  overlapContexts: number;
+  overlapEvents: number;
+  correlationScore: number;
+};
+
+export type CorrelationResult = {
+  entityId: string;
+  window: TimeWindow;
+  topN: number;
+  targetContextCount: number;
+  rows: CorrelationRow[];
+};
+
+export type AutomationSnapshot = {
+  automationId: string;
+  alias: string | null;
+  isEnabled: boolean | null;
+  triggerConfig: unknown[];
+  actionConfig: unknown[];
+  conditionsConfig: unknown[];
+  metadata: Record<string, unknown>;
+  capturedAt: string;
+};
+
+export type AutomationSnapshotResult = {
+  automationId: string;
+  found: boolean;
+  snapshot: AutomationSnapshot | null;
+  recentActivity: {
+    windowHours: number;
+    totalEvents: number;
+    stateChanges: number;
+    serviceCalls: number;
+    lastEventAt: string | null;
+  };
+};
+
+export type ListAutomationsFilter = {
+  search?: string;
+  isEnabled?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
+export type AutomationListItem = {
+  automationId: string;
+  alias: string | null;
+  isEnabled: boolean | null;
+  capturedAt: string;
+  metadata: Record<string, unknown>;
+};
+
+export type ListAutomationsResult = {
+  filterApplied: {
+    search: string | null;
+    isEnabled: boolean | null;
+    limit: number;
+    offset: number;
+  };
+  rows: AutomationListItem[];
+};
+
 export type PublishReportResult = {
   status: 'published' | 'stub';
   analysisResultId?: number;
@@ -73,6 +154,39 @@ export type PublishReportResult = {
 const toNumber = (value: unknown): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const toNullableBoolean = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', 't', '1'].includes(normalized)) {
+      return true;
+    }
+    if (['false', 'f', '0'].includes(normalized)) {
+      return false;
+    }
+  }
+  return null;
+};
+
+const toRecord = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+};
+
+const toArray = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  return [];
 };
 
 const ensureIsoDate = (date: string): string => {
@@ -95,6 +209,21 @@ const ensureWindow = (window: TimeWindow): { start: Date; end: Date } => {
   }
 
   return { start, end };
+};
+
+const ensurePositiveLimit = (value: number, fallback: number, maxValue: number): number => {
+  const parsed = Math.floor(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.min(parsed, maxValue);
+};
+
+const normalizeGranularity = (granularity: EntityTimelineGranularity): EntityTimelineGranularity => {
+  if (granularity === 'minute' || granularity === 'hour' || granularity === 'day') {
+    return granularity;
+  }
+  throw new Error(`granularity must be one of minute|hour|day, received '${String(granularity)}'`);
 };
 
 export const GET_DAILY_SUMMARY_SQL = `
@@ -238,6 +367,136 @@ SELECT
 FROM trace_contexts
 WHERE context_id = ANY($1::text[])
 ORDER BY context_id ASC
+`;
+
+const ENTITY_TIMELINE_SQL = `
+SELECT
+  date_trunc($4::text, e.event_time) AS bucket_start,
+  COUNT(*)::bigint AS total_events,
+  COUNT(*) FILTER (WHERE e.event_type = 'state_changed')::bigint AS state_changes,
+  COUNT(*) FILTER (WHERE e.event_type = 'call_service')::bigint AS service_calls
+FROM events e
+WHERE e.event_time >= $1::timestamptz
+  AND e.event_time < $2::timestamptz
+  AND e.entity_id = $3
+GROUP BY bucket_start
+ORDER BY bucket_start ASC
+`;
+
+const CORRELATE_SQL = `
+WITH target_contexts AS (
+  SELECT DISTINCT e.context_id
+  FROM events e
+  WHERE e.event_time >= $1::timestamptz
+    AND e.event_time < $2::timestamptz
+    AND e.entity_id = $3
+    AND e.context_id IS NOT NULL
+),
+target_stats AS (
+  SELECT COUNT(*)::bigint AS context_count FROM target_contexts
+),
+candidates AS (
+  SELECT
+    'entity'::text AS subject_type,
+    e.entity_id AS subject_id,
+    e.context_id
+  FROM events e
+  WHERE e.event_time >= $1::timestamptz
+    AND e.event_time < $2::timestamptz
+    AND e.context_id IN (SELECT context_id FROM target_contexts)
+    AND e.entity_id IS NOT NULL
+    AND e.entity_id <> $3
+  UNION ALL
+  SELECT
+    'service'::text AS subject_type,
+    CONCAT(COALESCE(e.domain, 'unknown'), '.', e.service) AS subject_id,
+    e.context_id
+  FROM events e
+  WHERE e.event_time >= $1::timestamptz
+    AND e.event_time < $2::timestamptz
+    AND e.context_id IN (SELECT context_id FROM target_contexts)
+    AND e.service IS NOT NULL
+),
+aggregated AS (
+  SELECT
+    c.subject_type,
+    c.subject_id,
+    COUNT(*)::bigint AS overlap_events,
+    COUNT(DISTINCT c.context_id)::bigint AS overlap_contexts
+  FROM candidates c
+  GROUP BY c.subject_type, c.subject_id
+)
+SELECT
+  a.subject_type,
+  a.subject_id,
+  a.overlap_contexts,
+  a.overlap_events,
+  CASE
+    WHEN t.context_count = 0 THEN 0
+    ELSE (a.overlap_contexts::numeric / t.context_count::numeric)
+  END AS correlation_score,
+  t.context_count
+FROM aggregated a
+CROSS JOIN target_stats t
+ORDER BY a.overlap_contexts DESC, a.overlap_events DESC, a.subject_type ASC, a.subject_id ASC
+LIMIT $4
+`;
+
+const AUTOMATION_SNAPSHOT_SQL = `
+SELECT
+  automation_id,
+  alias,
+  is_enabled,
+  trigger_config,
+  action_config,
+  conditions_config,
+  metadata,
+  captured_at
+FROM automation_snapshots
+WHERE automation_id = $1
+ORDER BY captured_at DESC, id DESC
+LIMIT 1
+`;
+
+const AUTOMATION_RECENT_ACTIVITY_SQL = `
+SELECT
+  COUNT(*)::bigint AS total_events,
+  COUNT(*) FILTER (WHERE event_type = 'state_changed')::bigint AS state_changes,
+  COUNT(*) FILTER (WHERE event_type = 'call_service')::bigint AS service_calls,
+  MAX(event_time) AS last_event_at
+FROM events
+WHERE event_time >= NOW() - ($2::int || ' hours')::interval
+  AND (
+    entity_id = $1
+    OR (
+      event_type = 'call_service'
+      AND COALESCE(data -> 'service_data' ->> 'entity_id', '') = $1
+    )
+  )
+`;
+
+const LIST_AUTOMATIONS_SQL = `
+WITH latest AS (
+  SELECT DISTINCT ON (automation_id)
+    automation_id,
+    alias,
+    is_enabled,
+    metadata,
+    captured_at
+  FROM automation_snapshots
+  ORDER BY automation_id, captured_at DESC, id DESC
+)
+SELECT
+  automation_id,
+  alias,
+  is_enabled,
+  metadata,
+  captured_at
+FROM latest
+WHERE ($1::text IS NULL OR automation_id ILIKE '%' || $1 || '%' OR COALESCE(alias, '') ILIKE '%' || $1 || '%')
+  AND ($2::boolean IS NULL OR is_enabled IS NOT DISTINCT FROM $2)
+ORDER BY captured_at DESC, automation_id ASC
+LIMIT $3 OFFSET $4
 `;
 
 const PUBLISH_REPORT_SQL = `
@@ -413,6 +672,200 @@ export const traceContext = async (
       parentContextId: row.parent_context_id,
       userId: row.user_id,
       data: (row.data ?? {}) as Record<string, unknown>,
+    })),
+  };
+};
+
+export const entityTimeline = async (
+  entityId: string,
+  start: string,
+  end: string,
+  granularity: EntityTimelineGranularity,
+  db?: SqlQueryable,
+): Promise<EntityTimelineResult | StubResponse> => {
+  if (!entityId) {
+    throw new Error('entityId is required');
+  }
+  const window = { start, end };
+  ensureWindow(window);
+  const normalizedGranularity = normalizeGranularity(granularity);
+
+  if (!db) {
+    return {
+      status: 'stub',
+      function: 'entityTimeline',
+      todo: 'Provide a SqlQueryable to execute ENTITY_TIMELINE_SQL.',
+    };
+  }
+
+  const result = await db.query<{
+    bucket_start: string;
+    total_events: string | number;
+    state_changes: string | number;
+    service_calls: string | number;
+  }>(ENTITY_TIMELINE_SQL, [start, end, entityId, normalizedGranularity]);
+
+  return {
+    entityId,
+    window,
+    granularity: normalizedGranularity,
+    buckets: result.rows.map((row) => ({
+      bucketStart: row.bucket_start,
+      totalEvents: toNumber(row.total_events),
+      stateChanges: toNumber(row.state_changes),
+      serviceCalls: toNumber(row.service_calls),
+    })),
+  };
+};
+
+export const correlate = async (
+  entityId: string,
+  window: TimeWindow,
+  topN = 5,
+  db?: SqlQueryable,
+): Promise<CorrelationResult | StubResponse> => {
+  if (!entityId) {
+    throw new Error('entityId is required');
+  }
+  ensureWindow(window);
+  const normalizedTopN = ensurePositiveLimit(topN, 5, 100);
+
+  if (!db) {
+    return {
+      status: 'stub',
+      function: 'correlate',
+      todo: 'Provide a SqlQueryable to execute CORRELATE_SQL.',
+    };
+  }
+
+  const result = await db.query<{
+    subject_type: 'entity' | 'service';
+    subject_id: string;
+    overlap_contexts: string | number;
+    overlap_events: string | number;
+    correlation_score: string | number;
+    context_count: string | number;
+  }>(CORRELATE_SQL, [window.start, window.end, entityId, normalizedTopN]);
+
+  const targetContextCount = toNumber(result.rows[0]?.context_count ?? 0);
+
+  return {
+    entityId,
+    window,
+    topN: normalizedTopN,
+    targetContextCount,
+    rows: result.rows.map((row) => ({
+      subjectType: row.subject_type,
+      subjectId: row.subject_id,
+      overlapContexts: toNumber(row.overlap_contexts),
+      overlapEvents: toNumber(row.overlap_events),
+      correlationScore: Number(row.correlation_score),
+    })),
+  };
+};
+
+export const getAutomationSnapshot = async (
+  automationId: string,
+  db?: SqlQueryable,
+): Promise<AutomationSnapshotResult | StubResponse> => {
+  if (!automationId) {
+    throw new Error('automationId is required');
+  }
+
+  if (!db) {
+    return {
+      status: 'stub',
+      function: 'getAutomationSnapshot',
+      todo: 'Provide a SqlQueryable to execute automation snapshot queries.',
+    };
+  }
+
+  const [snapshotResult, activityResult] = await Promise.all([
+    db.query<{
+      automation_id: string;
+      alias: string | null;
+      is_enabled: boolean | string | null;
+      trigger_config: unknown;
+      action_config: unknown;
+      conditions_config: unknown;
+      metadata: unknown;
+      captured_at: string;
+    }>(AUTOMATION_SNAPSHOT_SQL, [automationId]),
+    db.query<{
+      total_events: string | number;
+      state_changes: string | number;
+      service_calls: string | number;
+      last_event_at: string | null;
+    }>(AUTOMATION_RECENT_ACTIVITY_SQL, [automationId, 24]),
+  ]);
+
+  const snapshotRow = snapshotResult.rows[0];
+  const activityRow = activityResult.rows[0];
+
+  return {
+    automationId,
+    found: Boolean(snapshotRow),
+    snapshot: snapshotRow
+      ? {
+          automationId: snapshotRow.automation_id,
+          alias: snapshotRow.alias,
+          isEnabled: toNullableBoolean(snapshotRow.is_enabled),
+          triggerConfig: toArray(snapshotRow.trigger_config),
+          actionConfig: toArray(snapshotRow.action_config),
+          conditionsConfig: toArray(snapshotRow.conditions_config),
+          metadata: toRecord(snapshotRow.metadata),
+          capturedAt: snapshotRow.captured_at,
+        }
+      : null,
+    recentActivity: {
+      windowHours: 24,
+      totalEvents: toNumber(activityRow?.total_events ?? 0),
+      stateChanges: toNumber(activityRow?.state_changes ?? 0),
+      serviceCalls: toNumber(activityRow?.service_calls ?? 0),
+      lastEventAt: activityRow?.last_event_at ?? null,
+    },
+  };
+};
+
+export const listAutomations = async (
+  filter: ListAutomationsFilter = {},
+  db?: SqlQueryable,
+): Promise<ListAutomationsResult | StubResponse> => {
+  const rawSearch = typeof filter.search === 'string' ? filter.search.trim() : '';
+  const search = rawSearch.length > 0 ? rawSearch : null;
+  const isEnabled = toNullableBoolean(filter.isEnabled);
+  const limit = ensurePositiveLimit(filter.limit ?? 50, 50, 200);
+  const offset = Math.max(0, Math.floor(filter.offset ?? 0));
+
+  if (!db) {
+    return {
+      status: 'stub',
+      function: 'listAutomations',
+      todo: 'Provide a SqlQueryable to execute LIST_AUTOMATIONS_SQL.',
+    };
+  }
+
+  const result = await db.query<{
+    automation_id: string;
+    alias: string | null;
+    is_enabled: boolean | string | null;
+    metadata: unknown;
+    captured_at: string;
+  }>(LIST_AUTOMATIONS_SQL, [search, isEnabled, limit, offset]);
+
+  return {
+    filterApplied: {
+      search,
+      isEnabled,
+      limit,
+      offset,
+    },
+    rows: result.rows.map((row) => ({
+      automationId: row.automation_id,
+      alias: row.alias,
+      isEnabled: toNullableBoolean(row.is_enabled),
+      capturedAt: row.captured_at,
+      metadata: toRecord(row.metadata),
     })),
   };
 };

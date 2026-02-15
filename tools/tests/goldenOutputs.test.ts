@@ -4,7 +4,17 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
 
-import { getDailySummary, getTopChanges, publishReport, type TimeWindow, traceContext } from '../src/agentTools.js';
+import {
+  correlate,
+  entityTimeline,
+  getAutomationSnapshot,
+  getDailySummary,
+  getTopChanges,
+  listAutomations,
+  publishReport,
+  type TimeWindow,
+  traceContext,
+} from '../src/agentTools.js';
 import type { SqlQueryable } from '../src/db.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -154,6 +164,139 @@ describe('tool golden outputs', () => {
 
     const result = await publishReport('# Daily Summary', { runId: 'run-1', insights: [] }, db, 7);
     const golden = await readFixture<Record<string, unknown>>('publishReport.golden.json');
+
+    expect(result).toEqual(golden);
+  });
+
+  test('entityTimeline matches golden output', async () => {
+    const db: SqlQueryable = {
+      query: (async () => ({
+        rows: [
+          {
+            bucket_start: '2026-01-02T00:00:00.000Z',
+            total_events: '3',
+            state_changes: '2',
+            service_calls: '1',
+          },
+        ],
+        rowCount: 1,
+      })) as SqlQueryable['query'],
+    };
+
+    const result = await entityTimeline(
+      'light.kitchen',
+      '2026-01-02T00:00:00.000Z',
+      '2026-01-02T01:00:00.000Z',
+      'hour',
+      db,
+    );
+    const golden = await readFixture<Record<string, unknown>>('entityTimeline.golden.json');
+
+    expect(result).toEqual(golden);
+  });
+
+  test('correlate matches golden output', async () => {
+    const window: TimeWindow = {
+      start: '2026-01-02T00:00:00.000Z',
+      end: '2026-01-02T01:00:00.000Z',
+    };
+
+    const db: SqlQueryable = {
+      query: (async () => ({
+        rows: [
+          {
+            subject_type: 'service',
+            subject_id: 'light.turn_on',
+            overlap_contexts: '2',
+            overlap_events: '4',
+            correlation_score: '1',
+            context_count: '2',
+          },
+          {
+            subject_type: 'entity',
+            subject_id: 'sensor.outdoor_temp',
+            overlap_contexts: '1',
+            overlap_events: '1',
+            correlation_score: '0.5',
+            context_count: '2',
+          },
+        ],
+        rowCount: 2,
+      })) as SqlQueryable['query'],
+    };
+
+    const result = await correlate('light.kitchen', window, 2, db);
+    const golden = await readFixture<Record<string, unknown>>('correlate.golden.json');
+
+    expect(result).toEqual(golden);
+  });
+
+  test('getAutomationSnapshot matches golden output', async () => {
+    const db: SqlQueryable = {
+      query: (async (_sql: string, params?: unknown[]) => {
+        if (params?.length === 1) {
+          return {
+            rows: [
+              {
+                automation_id: 'automation.kitchen_lights',
+                alias: 'Kitchen Lights',
+                is_enabled: true,
+                trigger_config: [{ platform: 'time' }],
+                action_config: [{ service: 'light.turn_on' }],
+                conditions_config: [],
+                metadata: { source: 'golden' },
+                captured_at: '2026-01-02T00:00:00.000Z',
+              },
+            ],
+            rowCount: 1,
+          };
+        }
+
+        return {
+          rows: [
+            {
+              total_events: '3',
+              state_changes: '1',
+              service_calls: '2',
+              last_event_at: '2026-01-02T00:10:00.000Z',
+            },
+          ],
+          rowCount: 1,
+        };
+      }) as SqlQueryable['query'],
+    };
+
+    const result = await getAutomationSnapshot('automation.kitchen_lights', db);
+    const golden = await readFixture<Record<string, unknown>>('getAutomationSnapshot.golden.json');
+
+    expect(result).toEqual(golden);
+  });
+
+  test('listAutomations matches golden output', async () => {
+    const db: SqlQueryable = {
+      query: (async () => ({
+        rows: [
+          {
+            automation_id: 'automation.kitchen_lights',
+            alias: 'Kitchen Lights',
+            is_enabled: true,
+            metadata: { source: 'golden' },
+            captured_at: '2026-01-02T00:00:00.000Z',
+          },
+          {
+            automation_id: 'automation.night_mode',
+            alias: 'Night Mode',
+            is_enabled: false,
+            metadata: {},
+            captured_at: '2026-01-01T22:00:00.000Z',
+          },
+        ],
+        rowCount: 2,
+      })) as SqlQueryable['query'],
+    };
+
+    const result = await listAutomations({ limit: 2 }, db);
+    const golden = await readFixture<Record<string, unknown>>('listAutomations.golden.json');
 
     expect(result).toEqual(golden);
   });

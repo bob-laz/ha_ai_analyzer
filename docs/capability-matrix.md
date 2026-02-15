@@ -6,13 +6,12 @@
 | `getTopChanges` / `get_top_changes`                 | Implemented | `tools/src/agentTools.ts` | Compares current window vs prior window of equal length.         |
 | `traceContext` / `trace_context`                    | Implemented | `tools/src/agentTools.ts` | Recursive context graph + related events + trace metadata.       |
 | `publishReport` / `publish_report`                  | Implemented | `tools/src/agentTools.ts` | Persists to `analysis_results` when DB provided; stub otherwise. |
-| `entityTimeline` / `entity_timeline`                | Stub        | `tools/src/interfaces.ts` | Returns typed stub with implementation TODO.                     |
-| `correlate`                                         | Stub        | `tools/src/interfaces.ts` | Returns typed stub with implementation TODO.                     |
-| `getAutomationSnapshot` / `get_automation_snapshot` | Stub        | `tools/src/interfaces.ts` | Returns typed stub with implementation TODO.                     |
-| `listAutomations` / `list_automations`              | Stub        | `tools/src/interfaces.ts` | Returns typed stub with implementation TODO.                     |
+| `entityTimeline` / `entity_timeline`                | Implemented | `tools/src/agentTools.ts` | Bucketed event counts for a target entity and window.            |
+| `correlate`                                         | Implemented | `tools/src/agentTools.ts` | Context-overlap correlation ranking for related entities/services. |
+| `getAutomationSnapshot` / `get_automation_snapshot` | Implemented | `tools/src/agentTools.ts` | Latest automation snapshot + recent event activity summary.      |
+| `listAutomations` / `list_automations`              | Implemented | `tools/src/agentTools.ts` | Latest snapshots with search/enabled/limit/offset filtering.     |
 
 ## Agent Guidance
 
-- Prefer implemented functions for production analysis paths.
-- Treat stub responses as non-fatal and continue workflow with explicit limitation reporting.
-- Do not infer behavior for stubbed functions beyond the `todo` contract.
+- Prefer DB-backed execution for tool calls; without a DB client functions return typed stubs.
+- Keep function output contracts stable across refactors.
