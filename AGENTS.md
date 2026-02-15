@@ -60,9 +60,20 @@ Package-specific:
 - Tool query changes should include DB-backed integration tests (skip cleanly if `TEST_DATABASE_URL` missing).
 - Golden output tests in `tools/tests/goldenOutputs.test.ts` should be updated when changing output contracts.
 
+## CI Expectations
+- GitHub Actions workflow is defined in `.github/workflows/ci.yml`.
+- `verify` job must run `yarn verify` on push to `main` and pull requests.
+- `integration-tests` job must run `yarn test` with `TEST_DATABASE_URL` against Postgres 18 so DB-backed suites execute in CI.
+
+## Dependency Update Automation
+- Dependabot configuration is defined in `.github/dependabot.yml`.
+- Dependabot should monitor npm (Yarn workspaces), GitHub Actions, Docker Compose, and collector Dockerfile dependencies.
+- Auto-merge workflow is defined in `.github/workflows/dependabot-automerge.yml`.
+- Auto-merge must remain limited to Dependabot semver patch/minor updates and must rely on required CI checks before merge.
+
 ## Delivery Checklist
 1. Update code + tests together.
 2. Run relevant checks (`yarn build`, `yarn test`) when dependency resolution is available.
 3. Update docs and compose/env docs for behavior/config changes.
-4. Report any unrun checks and why.
+4. Report any skipped checks and why.
 5. After taking actions that change behavior, tooling, dependencies, or runtime versions, update both `README.md` and `AGENTS.md` in the same change.
