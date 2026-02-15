@@ -26,8 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_events_entity_id ON events (entity_id);
 CREATE INDEX IF NOT EXISTS idx_events_context_id ON events (context_id);
 CREATE INDEX IF NOT EXISTS idx_events_data_gin ON events USING GIN (data);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_events_dedupe_key_unique
-    ON events (dedupe_key)
-    WHERE dedupe_key IS NOT NULL;
+    ON events (dedupe_key);
 CREATE INDEX IF NOT EXISTS idx_events_context_time
     ON events (context_id, event_time DESC);
 CREATE INDEX IF NOT EXISTS idx_events_parent_context_id

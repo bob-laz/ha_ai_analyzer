@@ -17,7 +17,16 @@ const csvToArray = (value: string): string[] =>
     .filter(Boolean);
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
-  const parsed = Number(value ?? '');
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return fallback;
+  }
+
+  const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
