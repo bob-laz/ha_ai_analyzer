@@ -44,6 +44,13 @@ yarn dev:collector --mode=dev-ha
 
 - `HA_TOKEN`: Home Assistant long-lived token (required)
 
+Normalization note:
+- `call_service` events resolve `entityId` from `service_data.entity_id` / `target.entity_id` when provided as string or array.
+
+Default noise filters:
+- `state_changed` events are dropped when `old_state.state == new_state.state`.
+- `binary_sensor` motion events are kept only for `off -> on` transitions.
+
 ## Common Environment
 
 - `DATABASE_URL` default `postgresql://ha_ai:ha_ai_dev_password@localhost:5432/ha_ai`

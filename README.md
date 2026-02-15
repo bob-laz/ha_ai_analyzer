@@ -9,6 +9,10 @@ This project has two runtime components:
 - Collector (`@ha-ai/collector`): subscribes to Home Assistant websocket events and ingests normalized records into Postgres.
 - Tools (`@ha-ai/tools`): provides query tools (summary, top changes, context tracing, timelines, correlations, automation snapshots/listing) and an LLM analysis job that writes `agent_runs`, `insights`, `evidence`, `recommendations`, and `analysis_results`.
 
+Collector ingest defaults include noise suppression for Home Assistant event spam:
+- drop `state_changed` records where `old_state.state` equals `new_state.state`
+- keep `binary_sensor` motion records only for `off -> on` transitions
+
 ## Repository Layout
 
 - `collector/` collector package

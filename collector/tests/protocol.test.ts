@@ -140,7 +140,11 @@ describe('collector websocket protocol', () => {
                   event_type: 'call_service',
                   time_fired: '2026-01-02T00:01:00.000Z',
                   context: { id: 'ctx-ack' },
-                  data: { domain: 'light', service: 'turn_on' },
+                  data: {
+                    domain: 'light',
+                    service: 'turn_on',
+                    service_data: { entity_id: ['light.kitchen', 'light.hallway'] },
+                  },
                 },
               }),
             );
@@ -167,6 +171,7 @@ describe('collector websocket protocol', () => {
     expect(writer.add).toHaveBeenCalledTimes(1);
     const firstEvent = writer.add.mock.calls[0]?.[0] as NormalizedEvent | undefined;
     expect(firstEvent?.service).toBe('turn_on');
+    expect(firstEvent?.entityId).toBe('light.kitchen');
 
     await closeServer(wss);
   }, 15_000);
