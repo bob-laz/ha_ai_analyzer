@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "ha_ai_postgres",
+      "Group": "Local",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "ha_ai",
+      "Username": "ha_ai",
+      "SSLMode": "prefer"
+    }
+  }
+}

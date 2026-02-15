@@ -6,6 +6,7 @@ Guidance for coding agents working in this repository. Prioritize ingestion reli
 ## Environment Defaults
 - Runtime: Node.js 24
 - Package manager: Yarn 4
+- Shell for local helper scripts: Bash 5+ (`scripts/*.sh`)
 - Install deps from repo root: `yarn install`
 - Project uses Yarn workspaces (root-managed monorepo)
 - Database container target: Postgres 18
@@ -27,6 +28,14 @@ Run from repo root:
 - Integration tests (all): `yarn test:integration`
 - Integration tests (collector): `yarn test:integration:collector`
 - Integration tests (tools): `yarn test:integration:tools`
+- Start local DB services (postgres + pgadmin): `yarn dev:db:up`
+- Tear down local services/volumes (all local profiles): `yarn dev:down`
+- Collector local dev (LAN): `yarn dev:collector --mode=lan`
+- Collector local dev (local HA): `yarn dev:collector --mode=dev-ha`
+- Collector local dev (local HA + demo events): `yarn dev:collector --mode=dev-ha --with-demo-events`
+- Start local Home Assistant only: `yarn dev:ha:up`
+- Tail local Home Assistant logs: `yarn dev:ha:logs`
+- Emit local Home Assistant demo events: `yarn dev:ha:emit-demo`
 - Verify all checks: `yarn verify`
 - Lint: `yarn lint`
 - Format: `yarn format`
@@ -49,11 +58,13 @@ Package-specific:
 - Keep `schema/001_init.sql` as baseline.
 - Add only additive migration files for new schema/index changes.
 - Avoid destructive changes unless explicitly requested.
+- `events.dedupe_key` uniqueness for collector upsert should remain a non-partial unique index (`idx_events_dedupe_key_unique`).
 
 ## Tooling Rules
 - `getDailySummary`, `getTopChanges`, and `traceContext` are implemented paths and must remain stable.
 - Keep non-priority tools explicitly stubbed with typed `status: "stub"` payloads until requested.
 - `publishReport` should persist to `analysis_results` when a DB client is provided.
+- Collector numeric env parsing should apply documented fallbacks when values are unset or blank.
 - Prefer latest stable package versions when adding or updating dependencies.
 - When asked to upgrade dependencies, upgrade to the latest available versions unless the user explicitly asks for pinned/older versions.
 - Keep `biome.json` aligned with the installed Biome major version (run `yarn biome migrate --write` after major Biome upgrades).
@@ -63,6 +74,15 @@ Package-specific:
 - Tool query changes should include DB-backed integration tests (skip cleanly if `TEST_DATABASE_URL` missing).
 - Golden output tests in `tools/tests/goldenOutputs.test.ts` should be updated when changing output contracts.
 - `yarn test:integration*` scripts should ensure `docker compose` postgres is running and healthy before executing tests.
+- `dev-ha` compose profile is for local development only and should stay minimal (no production assumptions).
+- `dev:collector -- --mode=dev-ha` readiness checks should treat Home Assistant onboarding redirects as healthy startup.
+- `dev:collector -- --mode=dev-ha` should auto-bootstrap local Home Assistant auth when `DEV_HA_AUTO_BOOTSTRAP=true`, and cache token to `DEV_HA_TOKEN_FILE`.
+- `dev:collector -- --mode=dev-ha` should detect stale cached tokens and re-bootstrap; invalid user-exported `HA_TOKEN` should be surfaced with clear remediation.
+- Local dev HA bootstrap may fall back to short-lived access tokens when long-lived token creation fails.
+- `dev:collector -- --mode=...` should bring up `pgadmin` (debug profile) so local DB inspection is available by default.
+- `dev:db:up` should be the standalone path for starting postgres + pgadmin and should self-heal stale pgadmin network references.
+- `dev:down` should include `debug`, `dev-ha`, and `analytics` profiles to prevent stale in-use compose network errors during teardown.
+- `pgadmin/servers.json` should register `ha_ai_postgres` for local dev, and compose should keep server import enabled on startup.
 
 ## CI Expectations
 - GitHub Actions workflow is defined in `.github/workflows/ci.yml`.
