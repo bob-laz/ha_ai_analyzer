@@ -1,0 +1,7 @@
+{
+  "status": "published",
+  "analysisResultId": 42,
+  "publishedAt": "2026-01-02T12:34:56.000Z",
+  "markdownPreview": "# Daily Summary",
+  "payloadKeys": ["insights", "runId"]
+}

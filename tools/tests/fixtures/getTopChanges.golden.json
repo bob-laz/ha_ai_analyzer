@@ -1,0 +1,23 @@
+{
+  "window": {
+    "start": "2026-01-02T00:00:00.000Z",
+    "end": "2026-01-02T01:00:00.000Z"
+  },
+  "limit": 2,
+  "rows": [
+    {
+      "subjectType": "service",
+      "subjectId": "light.turn_on",
+      "currentCount": 4,
+      "previousCount": 1,
+      "delta": 3
+    },
+    {
+      "subjectType": "entity",
+      "subjectId": "sensor.outdoor_temp",
+      "currentCount": 1,
+      "previousCount": 4,
+      "delta": -3
+    }
+  ]
+}

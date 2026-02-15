@@ -1,0 +1,58 @@
+{
+  "requestedContextId": "ctx-child",
+  "rootContextId": "ctx-root",
+  "contextDepth": [
+    {
+      "contextId": "ctx-child",
+      "depth": 0
+    },
+    {
+      "contextId": "ctx-root",
+      "depth": 1
+    },
+    {
+      "contextId": "ctx-leaf",
+      "depth": 1
+    }
+  ],
+  "relatedContextMetadata": [
+    {
+      "contextId": "ctx-root",
+      "rootContextId": "ctx-root",
+      "relatedContextIds": ["ctx-child", "ctx-leaf"],
+      "metadata": {
+        "source": "golden"
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": 101,
+      "eventTime": "2026-01-02T00:05:00.000Z",
+      "eventType": "state_changed",
+      "domain": "light",
+      "entityId": "light.kitchen",
+      "service": null,
+      "contextId": "ctx-child",
+      "parentContextId": "ctx-root",
+      "userId": "user-1",
+      "data": {
+        "event_type": "state_changed"
+      }
+    },
+    {
+      "id": 102,
+      "eventTime": "2026-01-02T00:10:00.000Z",
+      "eventType": "call_service",
+      "domain": "light",
+      "entityId": null,
+      "service": "turn_on",
+      "contextId": "ctx-leaf",
+      "parentContextId": "ctx-child",
+      "userId": "user-1",
+      "data": {
+        "event_type": "call_service"
+      }
+    }
+  ]
+}

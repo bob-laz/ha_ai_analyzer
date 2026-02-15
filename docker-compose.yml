@@ -1,0 +1,95 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: ha_ai_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ha_ai
+      POSTGRES_USER: ha_ai
+      POSTGRES_PASSWORD: ha_ai_dev_password
+      TZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ha_ai -d ha_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  collector:
+    build:
+      context: .
+      dockerfile: collector/Dockerfile
+    container_name: ha_ai_collector
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://ha_ai:ha_ai_dev_password@postgres:5432/ha_ai
+      HA_WS_URL: ws://homeassistant.local:8123/api/websocket
+      HA_TOKEN: ${HA_TOKEN:-replace-me}
+      EVENT_TYPES: state_changed,call_service
+      DOMAIN_ALLOWLIST: ""
+      DOMAIN_EXCLUDELIST: automation,updater
+      BATCH_SIZE: 250
+      FLUSH_INTERVAL_SECONDS: 2
+      RECONNECT_INITIAL_SECONDS: 1
+      RECONNECT_MAX_SECONDS: 30
+      RECONNECT_JITTER_RATIO: 0.2
+      MAX_BUFFERED_EVENTS: 5000
+      OVERFLOW_POLICY: drop_newest
+      RETRY_BACKPRESSURE_DELAY_MS: 250
+      COLLECTOR_INSTANCE_ID: collector-local
+      LOG_LEVEL: info
+    command: ["yarn", "workspace", "@ha-ai/collector", "start:collector"]
+    working_dir: /app
+    volumes:
+      - ./:/app
+
+  analytics:
+    build:
+      context: .
+      dockerfile: collector/Dockerfile
+    container_name: ha_ai_analytics
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["analytics"]
+    environment:
+      DATABASE_URL: postgresql://ha_ai:ha_ai_dev_password@postgres:5432/ha_ai
+      REPORT_OUTPUT_DIR: /app/reports
+      ANALYTICS_TIMEZONE: UTC
+      LOG_LEVEL: info
+    command: ["yarn", "workspace", "@ha-ai/tools", "start:analytics"]
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - ./reports:/app/reports
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: ha_ai_pgadmin
+    restart: unless-stopped
+    profiles: ["debug"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  postgres_data:
+  pgadmin_data:
