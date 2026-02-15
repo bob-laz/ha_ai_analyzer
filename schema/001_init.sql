@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS events (
     parent_context_id TEXT,
     user_id TEXT,
     source TEXT NOT NULL DEFAULT 'home_assistant',
+    dedupe_key TEXT,
+    collector_instance TEXT NOT NULL DEFAULT 'unknown',
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     data JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -22,6 +25,20 @@ CREATE INDEX IF NOT EXISTS idx_events_domain ON events (domain);
 CREATE INDEX IF NOT EXISTS idx_events_entity_id ON events (entity_id);
 CREATE INDEX IF NOT EXISTS idx_events_context_id ON events (context_id);
 CREATE INDEX IF NOT EXISTS idx_events_data_gin ON events USING GIN (data);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_events_dedupe_key_unique
+    ON events (dedupe_key)
+    WHERE dedupe_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_events_context_time
+    ON events (context_id, event_time DESC);
+CREATE INDEX IF NOT EXISTS idx_events_parent_context_id
+    ON events (parent_context_id);
+CREATE INDEX IF NOT EXISTS idx_events_entity_time
+    ON events (entity_id, event_time DESC);
+CREATE INDEX IF NOT EXISTS idx_events_service_time
+    ON events (service, event_time DESC)
+    WHERE service IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_events_collector_received
+    ON events (collector_instance, received_at DESC);
 
 CREATE TABLE IF NOT EXISTS entity_snapshots (
     id BIGSERIAL PRIMARY KEY,

@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack install
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run verify
+        run: yarn verify
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: verify
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: ha_ai
+          POSTGRES_USER: ha_ai
+          POSTGRES_PASSWORD: ha_ai_dev_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ha_ai -d ha_ai"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      TEST_DATABASE_URL: postgresql://ha_ai:ha_ai_dev_password@localhost:5432/ha_ai
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack install
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            if bash -c "</dev/tcp/127.0.0.1/5432" 2>/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres did not become available in time" >&2
+          exit 1
+
+      - name: Run tests with integration enabled
+        run: yarn test

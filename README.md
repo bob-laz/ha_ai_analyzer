@@ -3,7 +3,7 @@
 ## Project Layout
 
 - `/collector` - Home Assistant WebSocket collector service (TypeScript)
-- `/schema` - Postgres schema bootstrap + additive migrations
+- `/schema` - Postgres schema bootstrap (single baseline script)
 - `/tools` - analytics/query tools and scheduled analytics job
 - `/docker-compose.yml` - local stack (postgres, collector, analytics profile, pgadmin profile)
 - `/docs/architecture.md` - runtime architecture and flow
@@ -52,7 +52,7 @@ docker compose --profile analytics up -d analytics
 
 ## Workspace Commands
 
-From `/Users/bob/code/homeassistant/ai_analyzer`:
+From `/Users/bob/code/homeassistant/ha_ai_analyzer`:
 
 ```bash
 yarn build
@@ -96,8 +96,7 @@ yarn
 
 ## Schema
 
-- `schema/001_init.sql` baseline tables and indexes
-- `schema/002_events_ingest_enhancements.sql` additive ingest idempotency + observability columns/indexes
+- `schema/001_init.sql` baseline tables, ingest idempotency columns, and indexes
 
 ## Local Validation Runbook
 
@@ -137,6 +136,38 @@ TEST_DATABASE_URL=postgresql://ha_ai:ha_ai_dev_password@localhost:5432/ha_ai yar
 ```
 
 Golden output fixtures for tool contracts are stored in `tools/tests/fixtures/` and validated by `tools/tests/goldenOutputs.test.ts`.
+
+Integration helper scripts (starts `postgres` via Docker Compose, waits for health, sets `TEST_DATABASE_URL` if unset):
+
+```bash
+yarn test:integration
+yarn test:integration:collector
+yarn test:integration:tools
+```
+
+## CI
+
+GitHub Actions workflow `.github/workflows/ci.yml` runs on push to `main` and pull requests:
+
+- `verify` job runs `yarn verify`.
+- `integration-tests` job starts `postgres:18`, sets `TEST_DATABASE_URL`, and runs `yarn test` so DB-backed integration suites execute.
+- CI enables Corepack and runs `corepack install`, which activates the package manager/version declared in `package.json` (`packageManager`).
+
+## Dependency Automation
+
+Dependabot configuration lives in `.github/dependabot.yml` and runs weekly for:
+
+- Yarn/npm workspace dependencies (`package-ecosystem: npm`, repo root)
+- GitHub Actions workflow dependencies
+- Docker Compose image tags in `docker-compose.yml`
+- Docker base images in `collector/Dockerfile`
+
+Auto-merge policy is in `.github/workflows/dependabot-automerge.yml`:
+
+- only Dependabot PRs are considered
+- only patch/minor version updates are auto-merged
+- merge method is `squash`
+- auto-merge still respects required status checks (CI must pass)
 
 ## Current Non-goals
 

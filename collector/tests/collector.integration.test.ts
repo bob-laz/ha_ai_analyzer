@@ -32,7 +32,7 @@ describe.skipIf(!shouldRun)('collector integration', () => {
       )
     `);
     await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_events_dedupe_key_unique_test ON events (dedupe_key)');
-    await pool.query('TRUNCATE TABLE events');
+    await pool.query('TRUNCATE TABLE events RESTART IDENTITY CASCADE');
   });
 
   afterAll(async () => {
