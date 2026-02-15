@@ -144,6 +144,7 @@ GitHub Actions workflow `.github/workflows/ci.yml` runs on push to `main` and pu
 
 - `verify` job runs `yarn verify`.
 - `integration-tests` job starts `postgres:18`, sets `TEST_DATABASE_URL`, and runs `yarn test` so DB-backed integration suites execute.
+- CI enables Corepack and runs `corepack install`, which activates the package manager/version declared in `package.json` (`packageManager`).
 
 ## Dependency Automation
 

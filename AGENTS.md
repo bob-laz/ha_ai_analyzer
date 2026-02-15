@@ -64,6 +64,7 @@ Package-specific:
 - GitHub Actions workflow is defined in `.github/workflows/ci.yml`.
 - `verify` job must run `yarn verify` on push to `main` and pull requests.
 - `integration-tests` job must run `yarn test` with `TEST_DATABASE_URL` against Postgres 18 so DB-backed suites execute in CI.
+- CI jobs must enable Corepack and run `corepack install` so the package manager/version comes from the repo `packageManager` field.
 
 ## Dependency Update Automation
 - Dependabot configuration is defined in `.github/dependabot.yml`.
