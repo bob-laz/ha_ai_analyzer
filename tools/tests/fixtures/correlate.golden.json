@@ -1,0 +1,25 @@
+{
+  "entityId": "light.kitchen",
+  "window": {
+    "start": "2026-01-02T00:00:00.000Z",
+    "end": "2026-01-02T01:00:00.000Z"
+  },
+  "topN": 2,
+  "targetContextCount": 2,
+  "rows": [
+    {
+      "subjectType": "service",
+      "subjectId": "light.turn_on",
+      "overlapContexts": 2,
+      "overlapEvents": 4,
+      "correlationScore": 1
+    },
+    {
+      "subjectType": "entity",
+      "subjectId": "sensor.outdoor_temp",
+      "overlapContexts": 1,
+      "overlapEvents": 1,
+      "correlationScore": 0.5
+    }
+  ]
+}

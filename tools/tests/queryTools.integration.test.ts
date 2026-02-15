@@ -1,7 +1,16 @@
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
-import { getDailySummary, getTopChanges, publishReport, traceContext } from '../src/agentTools.js';
+import {
+  correlate,
+  entityTimeline,
+  getAutomationSnapshot,
+  getDailySummary,
+  getTopChanges,
+  listAutomations,
+  publishReport,
+  traceContext,
+} from '../src/agentTools.js';
 
 const TEST_DB_URL = process.env.TEST_DATABASE_URL;
 const shouldRun = Boolean(TEST_DB_URL);
@@ -52,7 +61,25 @@ describe.skipIf(!shouldRun)('tool query integrations', () => {
       )
     `);
 
-    await pool.query('TRUNCATE TABLE events, trace_contexts, analysis_results RESTART IDENTITY CASCADE');
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS automation_snapshots (
+        id BIGSERIAL PRIMARY KEY,
+        automation_id TEXT NOT NULL,
+        alias TEXT,
+        is_enabled BOOLEAN,
+        trigger_config JSONB NOT NULL DEFAULT '[]'::jsonb,
+        action_config JSONB NOT NULL DEFAULT '[]'::jsonb,
+        conditions_config JSONB NOT NULL DEFAULT '[]'::jsonb,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        captured_at TIMESTAMPTZ NOT NULL,
+        source_event_id BIGINT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(
+      'TRUNCATE TABLE events, trace_contexts, analysis_results, automation_snapshots RESTART IDENTITY CASCADE',
+    );
 
     await pool.query(
       `INSERT INTO events (event_type, event_time, domain, entity_id, service, context_id, parent_context_id, user_id, data, dedupe_key)
@@ -77,6 +104,13 @@ describe.skipIf(!shouldRun)('tool query integrations', () => {
     await pool.query(
       `INSERT INTO trace_contexts (context_id, root_context_id, related_context_ids, metadata)
        VALUES ('ctx-root', 'ctx-root', '["ctx-child", "ctx-leaf"]'::jsonb, '{"source":"test"}'::jsonb)`,
+    );
+
+    await pool.query(
+      `INSERT INTO automation_snapshots (automation_id, alias, is_enabled, trigger_config, action_config, conditions_config, metadata, captured_at)
+       VALUES
+       ('automation.kitchen_lights', 'Kitchen Lights', true, '[{"platform":"state"}]'::jsonb, '[{"service":"light.turn_on"}]'::jsonb, '[]'::jsonb, '{"source":"test"}'::jsonb, '2026-01-02T00:00:00.000Z'),
+       ('automation.night_mode', 'Night Mode', false, '[{"platform":"time"}]'::jsonb, '[{"service":"light.turn_off"}]'::jsonb, '[]'::jsonb, '{}'::jsonb, '2026-01-01T23:50:00.000Z')`,
     );
   });
 
@@ -139,5 +173,79 @@ describe.skipIf(!shouldRun)('tool query integrations', () => {
     expect(published.status).toBe('published');
     expect(published.analysisResultId).toBeTypeOf('number');
     expect(published.payloadKeys).toEqual(['ok']);
+  });
+
+  test('entityTimeline aggregates per bucket', async () => {
+    const timeline = await entityTimeline(
+      'light.kitchen',
+      '2026-01-02T00:00:00.000Z',
+      '2026-01-02T01:00:00.000Z',
+      'hour',
+      pool,
+    );
+
+    if ('status' in timeline) {
+      throw new Error('entityTimeline unexpectedly returned stub');
+    }
+
+    expect(timeline.buckets.length).toBe(1);
+    expect(timeline.buckets[0]).toMatchObject({
+      totalEvents: 3,
+      stateChanges: 3,
+      serviceCalls: 0,
+    });
+  });
+
+  test('correlate returns related entities/services for target contexts', async () => {
+    const result = await correlate(
+      'light.kitchen',
+      {
+        start: '2026-01-02T00:00:00.000Z',
+        end: '2026-01-02T01:00:00.000Z',
+      },
+      5,
+      pool,
+    );
+
+    if ('status' in result) {
+      throw new Error('correlate unexpectedly returned stub');
+    }
+
+    expect(result.targetContextCount).toBe(1);
+    expect(result.rows[0]).toMatchObject({
+      subjectType: 'service',
+      subjectId: 'light.turn_on',
+      overlapContexts: 1,
+    });
+  });
+
+  test('getAutomationSnapshot returns latest snapshot and recent activity', async () => {
+    const snapshot = await getAutomationSnapshot('automation.kitchen_lights', pool);
+
+    if ('status' in snapshot) {
+      throw new Error('getAutomationSnapshot unexpectedly returned stub');
+    }
+
+    expect(snapshot.found).toBe(true);
+    expect(snapshot.snapshot?.alias).toBe('Kitchen Lights');
+    expect(snapshot.recentActivity.totalEvents).toBeGreaterThanOrEqual(0);
+  });
+
+  test('listAutomations returns latest rows with filtering', async () => {
+    const automations = await listAutomations(
+      {
+        isEnabled: true,
+        limit: 10,
+      },
+      pool,
+    );
+
+    if ('status' in automations) {
+      throw new Error('listAutomations unexpectedly returned stub');
+    }
+
+    expect(automations.rows.length).toBe(1);
+    expect(automations.rows[0]?.automationId).toBe('automation.kitchen_lights');
+    expect(automations.rows[0]?.isEnabled).toBe(true);
   });
 });

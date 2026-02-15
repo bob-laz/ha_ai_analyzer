@@ -189,7 +189,7 @@ const buildInsert = (rows: WriterRow[], collectorInstanceId: string): { sql: str
       ${INSERT_COLUMNS.join(', ')}
     )
     VALUES ${placeholders.join(', ')}
-    ON CONFLICT (dedupe_key) DO NOTHING
+    ON CONFLICT DO NOTHING
   `;
 
   return { sql, values };

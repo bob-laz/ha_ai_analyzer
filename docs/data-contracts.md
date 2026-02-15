@@ -17,6 +17,10 @@ Required fields used by ingestion and tools:
 - `collector_instance` `text`
 - `received_at` `timestamptz`
 
+Notes:
+- `events` is range-partitioned by `event_time` (daily partitions).
+- Collector dedupe upsert uses composite uniqueness on `(event_time, dedupe_key)`.
+
 ### `trace_contexts`
 - `context_id` `text` (unique)
 - `root_context_id` `text | null`
@@ -85,6 +89,82 @@ Required fields used by ingestion and tools:
 }
 ```
 
+### `entityTimeline(entityId, start, end, granularity, db)`
+```ts
+{
+  entityId: string;
+  window: { start: string; end: string };
+  granularity: 'minute' | 'hour' | 'day';
+  buckets: Array<{
+    bucketStart: string;
+    totalEvents: number;
+    stateChanges: number;
+    serviceCalls: number;
+  }>;
+}
+```
+
+### `correlate(entityId, window, topN, db)`
+```ts
+{
+  entityId: string;
+  window: { start: string; end: string };
+  topN: number;
+  targetContextCount: number;
+  rows: Array<{
+    subjectType: 'entity' | 'service';
+    subjectId: string;
+    overlapContexts: number;
+    overlapEvents: number;
+    correlationScore: number;
+  }>;
+}
+```
+
+### `getAutomationSnapshot(automationId, db)`
+```ts
+{
+  automationId: string;
+  found: boolean;
+  snapshot: {
+    automationId: string;
+    alias: string | null;
+    isEnabled: boolean | null;
+    triggerConfig: unknown[];
+    actionConfig: unknown[];
+    conditionsConfig: unknown[];
+    metadata: Record<string, unknown>;
+    capturedAt: string;
+  } | null;
+  recentActivity: {
+    windowHours: number;
+    totalEvents: number;
+    stateChanges: number;
+    serviceCalls: number;
+    lastEventAt: string | null;
+  };
+}
+```
+
+### `listAutomations(filter, db)`
+```ts
+{
+  filterApplied: {
+    search: string | null;
+    isEnabled: boolean | null;
+    limit: number;
+    offset: number;
+  };
+  rows: Array<{
+    automationId: string;
+    alias: string | null;
+    isEnabled: boolean | null;
+    capturedAt: string;
+    metadata: Record<string, unknown>;
+  }>;
+}
+```
+
 ### `publishReport(markdown, jsonPayload, db, agentRunId)`
 ```ts
 {
@@ -97,7 +177,7 @@ Required fields used by ingestion and tools:
 ```
 
 ## Stub Contract
-Unimplemented tools return:
+When a DB client is not provided, tool functions return:
 ```ts
 {
   status: 'stub';

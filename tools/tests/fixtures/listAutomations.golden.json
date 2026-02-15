@@ -1,0 +1,26 @@
+{
+  "filterApplied": {
+    "search": null,
+    "isEnabled": null,
+    "limit": 2,
+    "offset": 0
+  },
+  "rows": [
+    {
+      "automationId": "automation.kitchen_lights",
+      "alias": "Kitchen Lights",
+      "isEnabled": true,
+      "capturedAt": "2026-01-02T00:00:00.000Z",
+      "metadata": {
+        "source": "golden"
+      }
+    },
+    {
+      "automationId": "automation.night_mode",
+      "alias": "Night Mode",
+      "isEnabled": false,
+      "capturedAt": "2026-01-01T22:00:00.000Z",
+      "metadata": {}
+    }
+  ]
+}
