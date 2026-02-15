@@ -77,7 +77,7 @@ describe('tool golden outputs', () => {
   test('traceContext matches golden output', async () => {
     const db: SqlQueryable = {
       query: (async (sql: string) => {
-        if (sql.includes('WITH RECURSIVE graph AS')) {
+        if (sql.includes('WITH RECURSIVE edges AS') || sql.includes('WITH RECURSIVE graph AS')) {
           return {
             rows: [
               { context_id: 'ctx-child', depth: 0 },

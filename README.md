@@ -3,7 +3,7 @@
 ## Project Layout
 
 - `/collector` - Home Assistant WebSocket collector service (TypeScript)
-- `/schema` - Postgres schema bootstrap + additive migrations
+- `/schema` - Postgres schema bootstrap (single baseline script)
 - `/tools` - analytics/query tools and scheduled analytics job
 - `/docker-compose.yml` - local stack (postgres, collector, analytics profile, pgadmin profile)
 - `/docs/architecture.md` - runtime architecture and flow
@@ -96,8 +96,7 @@ yarn
 
 ## Schema
 
-- `schema/001_init.sql` baseline tables and indexes
-- `schema/002_events_ingest_enhancements.sql` additive ingest idempotency + observability columns/indexes
+- `schema/001_init.sql` baseline tables, ingest idempotency columns, and indexes
 
 ## Local Validation Runbook
 
@@ -137,6 +136,14 @@ TEST_DATABASE_URL=postgresql://ha_ai:ha_ai_dev_password@localhost:5432/ha_ai yar
 ```
 
 Golden output fixtures for tool contracts are stored in `tools/tests/fixtures/` and validated by `tools/tests/goldenOutputs.test.ts`.
+
+Integration helper scripts (starts `postgres` via Docker Compose, waits for health, sets `TEST_DATABASE_URL` if unset):
+
+```bash
+yarn test:integration
+yarn test:integration:collector
+yarn test:integration:tools
+```
 
 ## CI
 

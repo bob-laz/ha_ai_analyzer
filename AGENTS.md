@@ -17,13 +17,16 @@ Guidance for coding agents working in this repository. Prioritize ingestion reli
 - `tools/`: analytics/tool package
 - `tools/src/`: tool/query interfaces and analytics job
 - `tools/tests/`: tool integration tests
-- `schema/`: additive SQL migrations
+- `schema/`: baseline SQL bootstrap (future additive migrations when needed)
 - `docker-compose.yml`: local stack
 
 ## Command Reference
 Run from repo root:
 - Build: `yarn build`
 - Tests: `yarn test`
+- Integration tests (all): `yarn test:integration`
+- Integration tests (collector): `yarn test:integration:collector`
+- Integration tests (tools): `yarn test:integration:tools`
 - Verify all checks: `yarn verify`
 - Lint: `yarn lint`
 - Format: `yarn format`
@@ -59,6 +62,7 @@ Package-specific:
 - Collector changes should include protocol tests plus ingest write-path validation.
 - Tool query changes should include DB-backed integration tests (skip cleanly if `TEST_DATABASE_URL` missing).
 - Golden output tests in `tools/tests/goldenOutputs.test.ts` should be updated when changing output contracts.
+- `yarn test:integration*` scripts should ensure `docker compose` postgres is running and healthy before executing tests.
 
 ## CI Expectations
 - GitHub Actions workflow is defined in `.github/workflows/ci.yml`.

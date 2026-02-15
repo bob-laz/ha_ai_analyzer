@@ -183,20 +183,24 @@ LIMIT $4
 `;
 
 export const TRACE_CONTEXT_GRAPH_SQL = `
-WITH RECURSIVE graph AS (
-  SELECT $1::text AS context_id, 0::int AS depth
-  UNION
-  SELECT e.parent_context_id AS context_id, g.depth + 1
+WITH RECURSIVE edges AS (
+  SELECT e.context_id AS source_context_id, e.parent_context_id AS target_context_id
   FROM events e
-  JOIN graph g ON e.context_id = g.context_id
-  WHERE e.parent_context_id IS NOT NULL
-    AND g.depth < $2
-  UNION
-  SELECT e.context_id AS context_id, g.depth + 1
-  FROM events e
-  JOIN graph g ON e.parent_context_id = g.context_id
   WHERE e.context_id IS NOT NULL
-    AND g.depth < $2
+    AND e.parent_context_id IS NOT NULL
+  UNION
+  SELECT e.parent_context_id AS source_context_id, e.context_id AS target_context_id
+  FROM events e
+  WHERE e.context_id IS NOT NULL
+    AND e.parent_context_id IS NOT NULL
+),
+graph AS (
+  SELECT $1::text AS context_id, 0::int AS depth
+  UNION ALL
+  SELECT edge.target_context_id AS context_id, g.depth + 1
+  FROM graph g
+  JOIN edges edge ON edge.source_context_id = g.context_id
+  WHERE g.depth < $2
 ),
 dedup AS (
   SELECT context_id, MIN(depth) AS depth

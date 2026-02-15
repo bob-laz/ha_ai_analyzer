@@ -52,7 +52,7 @@ describe.skipIf(!shouldRun)('tool query integrations', () => {
       )
     `);
 
-    await pool.query('TRUNCATE TABLE events, trace_contexts, analysis_results RESTART IDENTITY');
+    await pool.query('TRUNCATE TABLE events, trace_contexts, analysis_results RESTART IDENTITY CASCADE');
 
     await pool.query(
       `INSERT INTO events (event_type, event_time, domain, entity_id, service, context_id, parent_context_id, user_id, data, dedupe_key)

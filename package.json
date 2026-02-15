@@ -9,6 +9,9 @@
   "scripts": {
     "build": "yarn workspaces foreach -A -t run build",
     "test": "yarn workspaces foreach -A run test",
+    "test:integration": "bash scripts/run-integration-tests.sh",
+    "test:integration:collector": "bash scripts/run-integration-tests.sh collector",
+    "test:integration:tools": "bash scripts/run-integration-tests.sh tools",
     "verify": "yarn build && yarn lint && yarn test",
     "lint": "biome check .",
     "format": "biome format --write .",
