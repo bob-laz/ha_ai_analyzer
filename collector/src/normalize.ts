@@ -14,13 +14,53 @@ const parseDate = (raw: string | undefined): Date => {
 };
 
 const resolveEntityId = (data: Record<string, unknown>): string | null => {
-  if (typeof data.entity_id === 'string') {
-    return data.entity_id;
+  const extractEntityId = (value: unknown): string | null => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === 'string') {
+          const trimmed = item.trim();
+          if (trimmed.length > 0) {
+            return trimmed;
+          }
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const directEntityId = extractEntityId(data.entity_id);
+  if (directEntityId) {
+    return directEntityId;
   }
 
   const newState = data.new_state;
-  if (newState && typeof newState === 'object' && typeof (newState as { entity_id?: unknown }).entity_id === 'string') {
-    return (newState as { entity_id: string }).entity_id;
+  if (newState && typeof newState === 'object') {
+    const newStateEntityId = extractEntityId((newState as { entity_id?: unknown }).entity_id);
+    if (newStateEntityId) {
+      return newStateEntityId;
+    }
+  }
+
+  const serviceData = data.service_data;
+  if (serviceData && typeof serviceData === 'object') {
+    const serviceEntityId = extractEntityId((serviceData as { entity_id?: unknown }).entity_id);
+    if (serviceEntityId) {
+      return serviceEntityId;
+    }
+  }
+
+  const target = data.target;
+  if (target && typeof target === 'object') {
+    const targetEntityId = extractEntityId((target as { entity_id?: unknown }).entity_id);
+    if (targetEntityId) {
+      return targetEntityId;
+    }
   }
 
   return null;

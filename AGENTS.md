@@ -63,6 +63,9 @@ Package-specific:
 3. Collector must batch inserts and flush on shutdown.
 4. Domain allowlist/excludelist filtering must be enforced before writes.
 5. Event ingestion must remain idempotent via `dedupe_key`.
+6. Collector normalization should resolve call-service targets from `service_data.entity_id` / `target.entity_id` (string or array) when present.
+7. Collector should drop `state_changed` events where `old_state.state == new_state.state`.
+8. Collector should keep `binary_sensor` motion events only for `off -> on` transitions.
 
 ## Database Rules
 
