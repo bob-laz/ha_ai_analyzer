@@ -4,9 +4,9 @@ services:
     container_name: ha_ai_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ha_ai
-      POSTGRES_USER: ha_ai
-      POSTGRES_PASSWORD: ha_ai_dev_password
+      POSTGRES_DB: ${POSTGRES_DB:-ha_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-ha_ai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ha_ai_dev_password}
       TZ: UTC
     ports:
       - "5432:5432"
@@ -14,7 +14,11 @@ services:
       - postgres_data:/var/lib/postgresql
       - ./schema:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ha_ai -d ha_ai"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-ha_ai} -d ${POSTGRES_DB:-ha_ai}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 8
@@ -39,7 +43,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://ha_ai:ha_ai_dev_password@postgres:5432/ha_ai
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ha_ai}:${POSTGRES_PASSWORD:-ha_ai_dev_password}@postgres:5432/${POSTGRES_DB:-ha_ai}
       HA_WS_URL: ws://homeassistant.local:8123/api/websocket
       HA_TOKEN: ${HA_TOKEN:-replace-me}
       EVENT_TYPES: state_changed,call_service
@@ -76,7 +80,7 @@ services:
         condition: service_healthy
     profiles: ["analytics"]
     environment:
-      DATABASE_URL: postgresql://ha_ai:ha_ai_dev_password@postgres:5432/ha_ai
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ha_ai}:${POSTGRES_PASSWORD:-ha_ai_dev_password}@postgres:5432/${POSTGRES_DB:-ha_ai}
       REPORT_OUTPUT_DIR: /app/reports
       ANALYTICS_TIMEZONE: UTC
       LOG_LEVEL: info
@@ -95,15 +99,25 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
       PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: ${PGADMIN_MASTER_PASSWORD_REQUIRED:-False}
       PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
+      PGADMIN_DB_HOST: ${PGADMIN_DB_HOST:-postgres}
+      PGADMIN_DB_PORT: ${PGADMIN_DB_PORT:-5432}
+      PGADMIN_DB_NAME: ${PGADMIN_DB_NAME:-${POSTGRES_DB:-ha_ai}}
+      PGADMIN_DB_USER: ${PGADMIN_DB_USER:-${POSTGRES_USER:-ha_ai}}
+      PGADMIN_DB_PASSWORD: ${PGADMIN_DB_PASSWORD:-${POSTGRES_PASSWORD:-ha_ai_dev_password}}
+    entrypoint:
+      - /bin/sh
+      - /pgadmin4/bootstrap.sh
     ports:
       - "5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
       - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - ./pgadmin/bootstrap.sh:/pgadmin4/bootstrap.sh:ro
 
 volumes:
   postgres_data:

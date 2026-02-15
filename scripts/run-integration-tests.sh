@@ -4,6 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# Load repo-local .env values for integration defaults.
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/.env"
+  set +a
+fi
+
+POSTGRES_DB="${POSTGRES_DB:-ha_ai}"
+POSTGRES_USER="${POSTGRES_USER:-ha_ai}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-ha_ai_dev_password}"
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker is required to run integration tests." >&2
   exit 1
@@ -46,7 +58,7 @@ if [[ "${STATUS:-unknown}" != "healthy" ]]; then
   exit 1
 fi
 
-export TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgresql://ha_ai:ha_ai_dev_password@127.0.0.1:5432/ha_ai}"
+export TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}}"
 
 case "$TARGET" in
   collector)

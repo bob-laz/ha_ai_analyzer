@@ -107,6 +107,8 @@ Package-specific:
 - `dev:collector --mode=...` should auto-start the retention scheduler by default (disable with `RETENTION_AUTOSTART=false`).
 - `dev:down` should include `debug`, `dev-ha`, and `analytics` profiles to prevent stale in-use compose network errors during teardown.
 - `pgadmin/servers.json` should register `ha_ai_postgres` for local dev, and compose should keep server import enabled on startup.
+- pgAdmin default login and master-password behavior should be configurable via `.env` (`PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`, `PGADMIN_MASTER_PASSWORD_REQUIRED`).
+- pgAdmin registered server password should default from DB env configuration (`PGADMIN_DB_PASSWORD` fallback to `POSTGRES_PASSWORD`).
 
 ## CI Expectations
 
