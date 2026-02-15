@@ -65,6 +65,7 @@ yarn dev:db:up
 ```
 
 Retention scheduler starts automatically when `yarn dev:collector` starts.
+pgAdmin defaults come from `.env` (`PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`) and the registered `ha_ai_postgres` server reuses your configured DB password.
 
 4. Run collector locally (choose mode):
 

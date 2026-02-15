@@ -4,6 +4,37 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# Load repo-local .env values for local DB + pgAdmin defaults.
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/.env"
+  set +a
+fi
+
+POSTGRES_DB="${POSTGRES_DB:-ha_ai}"
+POSTGRES_USER="${POSTGRES_USER:-ha_ai}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-ha_ai_dev_password}"
+
+PGADMIN_DEFAULT_EMAIL="${PGADMIN_DEFAULT_EMAIL:-admin@example.com}"
+PGADMIN_DEFAULT_PASSWORD="${PGADMIN_DEFAULT_PASSWORD:-admin}"
+PGADMIN_DB_HOST="${PGADMIN_DB_HOST:-postgres}"
+PGADMIN_DB_PORT="${PGADMIN_DB_PORT:-5432}"
+PGADMIN_DB_NAME="${PGADMIN_DB_NAME:-$POSTGRES_DB}"
+PGADMIN_DB_USER="${PGADMIN_DB_USER:-$POSTGRES_USER}"
+PGADMIN_DB_PASSWORD="${PGADMIN_DB_PASSWORD:-$POSTGRES_PASSWORD}"
+
+export POSTGRES_DB
+export POSTGRES_USER
+export POSTGRES_PASSWORD
+export PGADMIN_DEFAULT_EMAIL
+export PGADMIN_DEFAULT_PASSWORD
+export PGADMIN_DB_HOST
+export PGADMIN_DB_PORT
+export PGADMIN_DB_NAME
+export PGADMIN_DB_USER
+export PGADMIN_DB_PASSWORD
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker is required to run local database services." >&2
   exit 1
@@ -66,5 +97,5 @@ echo "Ensuring pgAdmin is running (profile: debug)..."
 ensure_pgadmin_running
 
 echo "Postgres ready at localhost:5432"
-echo "pgAdmin available at http://127.0.0.1:5050 (default login: admin@example.com / admin)"
-echo "Registered pgAdmin server: ha_ai_postgres (host: postgres, database: ha_ai, user: ha_ai)"
+echo "pgAdmin available at http://127.0.0.1:5050 (default login: ${PGADMIN_DEFAULT_EMAIL} / ${PGADMIN_DEFAULT_PASSWORD})"
+echo "Registered pgAdmin server: ha_ai_postgres (host: ${PGADMIN_DB_HOST}, database: ${PGADMIN_DB_NAME}, user: ${PGADMIN_DB_USER})"

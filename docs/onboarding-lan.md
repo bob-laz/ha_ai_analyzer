@@ -80,6 +80,8 @@ This starts:
 
 - Postgres on `localhost:5432`
 - pgAdmin on `http://127.0.0.1:5050`
+- pgAdmin login defaults from `.env` (`PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`)
+- pgAdmin server uses DB credentials from `.env` (`PGADMIN_DB_PASSWORD`, falling back to `POSTGRES_PASSWORD`)
 - (Later) retention scheduler starts automatically when collector starts
 
 ## 6. Start Collector in LAN Mode
@@ -102,7 +104,7 @@ Leave this process running while testing.
 Option A: pgAdmin
 
 - Open `http://127.0.0.1:5050`
-- Login: `admin@example.com` / `admin`
+- Login: values from `.env` (`PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD`)
 - Server is pre-registered as `ha_ai_postgres`
 - Run:
 
@@ -116,7 +118,7 @@ LIMIT 20;
 Option B: psql in container
 
 ```bash
-docker exec -it ha_ai_postgres psql -U ha_ai -d ha_ai -c "SELECT event_type, entity_id, received_at FROM events ORDER BY received_at DESC LIMIT 20;"
+docker exec -it ha_ai_postgres psql -U "${POSTGRES_USER:-ha_ai}" -d "${POSTGRES_DB:-ha_ai}" -c "SELECT event_type, entity_id, received_at FROM events ORDER BY received_at DESC LIMIT 20;"
 ```
 
 ## 8. Optional: Run One LLM Analysis Pass
