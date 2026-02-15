@@ -72,7 +72,7 @@ services:
       - ./reports:/app/reports
 
   pgadmin:
-    image: dpage/pgadmin4:8
+    image: dpage/pgadmin4:9
     container_name: ha_ai_pgadmin
     restart: unless-stopped
     profiles: ["debug"]
