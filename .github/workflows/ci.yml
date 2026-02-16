@@ -16,6 +16,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Verify Docker image build
+        run: docker build -f collector/Dockerfile . --tag ha-ai-analyzer:ci-${{ github.sha }}
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -81,3 +84,59 @@ jobs:
 
       - name: Run tests with integration enabled
         run: yarn test
+
+  publish-pr-image:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive PR image tags
+        id: tags
+        run: |
+          short_sha="$(printf '%s' "${GITHUB_SHA}" | cut -c1-12)"
+          echo "full=ghcr.io/${GITHUB_REPOSITORY}:pr-${PR_NUMBER}-sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "short=ghcr.io/${GITHUB_REPOSITORY}:pr-${PR_NUMBER}-sha-${short_sha}" >> "$GITHUB_OUTPUT"
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
+      - name: Build and push PR image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./collector/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.full }}
+            ${{ steps.tags.outputs.short }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=ha_ai_analyzer
+            org.opencontainers.image.description=PR preview image for ha_ai_analyzer
+
+      - name: Publish summary
+        run: |
+          {
+            echo "## PR Image Published"
+            echo
+            echo "- PR: #${{ github.event.pull_request.number }}"
+            echo "- Image: \`${{ steps.tags.outputs.short }}\`"
+            echo "- Digest: \`${{ steps.build.outputs.digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

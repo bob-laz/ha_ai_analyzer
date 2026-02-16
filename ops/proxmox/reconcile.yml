@@ -1,0 +1,15 @@
+---
+- name: Reconcile HA AI Proxmox host baseline
+  hosts: ha_ai_prod
+  become: true
+  vars:
+    lan_cidr: 192.168.0.0/16
+    app_owner: deploy
+  tasks:
+    - name: Run idempotent host bootstrap reconcile
+      ansible.builtin.script: ./bootstrap.sh
+      args:
+        executable: /bin/bash
+      environment:
+        LAN_CIDR: "{{ lan_cidr }}"
+        APP_OWNER: "{{ app_owner }}"

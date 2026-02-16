@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly HA AI Postgres backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+Unit=ha-ai-db-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -176,6 +176,82 @@ describe('collector websocket protocol', () => {
     await closeServer(wss);
   }, 15_000);
 
+  test('enriches call_service entity_id from service_data.device_id', async () => {
+    if (!(await canBindTcpPort())) {
+      return;
+    }
+    const server = await createServer();
+    const { wss, port } = server;
+
+    wss.on('connection', (socket) => {
+      socket.send(JSON.stringify({ type: 'auth_required' }));
+
+      socket.on('message', (raw) => {
+        const message = JSON.parse(raw.toString()) as { type: string; id?: number };
+        if (message.type === 'auth') {
+          socket.send(JSON.stringify({ type: 'auth_ok' }));
+          return;
+        }
+
+        if (message.type === 'subscribe_events') {
+          socket.send(JSON.stringify({ id: message.id, type: 'result', success: true, result: null }));
+          socket.send(
+            JSON.stringify({
+              type: 'event',
+              id: message.id,
+              event: {
+                event_type: 'call_service',
+                time_fired: '2026-01-02T00:03:00.000Z',
+                context: { id: 'ctx-device-id' },
+                data: {
+                  domain: 'light',
+                  service: 'turn_off',
+                  service_data: { device_id: ['device-abc123'] },
+                },
+              },
+            }),
+          );
+          return;
+        }
+
+        if (message.type === 'config/entity_registry/list') {
+          socket.send(
+            JSON.stringify({
+              id: message.id,
+              type: 'result',
+              success: true,
+              result: [
+                {
+                  entity_id: 'light.hallway_lights',
+                  device_id: 'device-abc123',
+                },
+              ],
+            }),
+          );
+        }
+      });
+    });
+
+    const writer = {
+      add: vi.fn(async (_event: NormalizedEvent) => true),
+    };
+
+    const collector = new HAEventCollector(createConfig(`ws://127.0.0.1:${port}`, ['call_service']), writer);
+    writer.add.mockImplementation(async () => {
+      collector.stop();
+      return true;
+    });
+
+    await collector.runForever();
+
+    expect(writer.add).toHaveBeenCalledTimes(1);
+    const firstEvent = writer.add.mock.calls[0]?.[0] as NormalizedEvent | undefined;
+    expect(firstEvent?.eventType).toBe('call_service');
+    expect(firstEvent?.entityId).toBe('light.hallway_lights');
+
+    await closeServer(wss);
+  }, 15_000);
+
   test('reconnects after dropped connection and resumes ingest', async () => {
     if (!(await canBindTcpPort())) {
       return;

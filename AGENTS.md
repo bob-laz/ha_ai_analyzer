@@ -23,6 +23,8 @@ Guidance for coding agents working in this repository. Prioritize ingestion reli
 - `tools/tests/`: tool integration tests
 - `schema/`: baseline SQL bootstrap (future additive migrations when needed)
 - `docker-compose.yml`: local stack
+- `docker-compose.prod.yml`: Proxmox production stack
+- `ops/proxmox/`: Proxmox bootstrap/deploy/rollback/backup automation
 
 ## Command Reference
 
@@ -50,11 +52,19 @@ Run from repo root:
 - Run retention once: `yarn start:retention --once`
 - Run analysis once: `yarn start:analysis:once`
 - Run analysis scheduler: `yarn start:analysis:scheduler`
+- Validate production compose config: `docker compose -f docker-compose.prod.yml --env-file .env.prod.example config`
 
 Package-specific:
 
 - Collector: `yarn workspace @ha-ai/collector <script>`
 - Tools: `yarn workspace @ha-ai/tools <script>`
+
+Proxmox operations (run on VM):
+
+- Bootstrap host baseline: `sudo /opt/ha-ai/app/ops/proxmox/bootstrap.sh`
+- Deploy image tag: `/opt/ha-ai/app/ops/proxmox/deploy.sh --tag sha-<commit>`
+- Roll back: `/opt/ha-ai/app/ops/proxmox/rollback.sh`
+- Run backup once: `/opt/ha-ai/app/ops/proxmox/backup-db.sh`
 
 ## Core Invariants
 
@@ -63,9 +73,10 @@ Package-specific:
 3. Collector must batch inserts and flush on shutdown.
 4. Domain allowlist/excludelist filtering must be enforced before writes.
 5. Event ingestion must remain idempotent via `dedupe_key`.
-6. Collector normalization should resolve call-service targets from `service_data.entity_id` / `target.entity_id` (string or array) when present.
+6. Collector normalization should resolve call-service targets from `service_data.entity_id` / `target.entity_id` (string or array) when present, and attempt device-based enrichment from `service_data.device_id` / `target.device_id` via HA entity registry when needed.
 7. Collector should drop `state_changed` events where `old_state.state == new_state.state`.
 8. Collector should keep `binary_sensor` motion events only for `off -> on` transitions.
+9. Production deployment should use immutable GHCR image tags via `docker-compose.prod.yml` (no source bind-mount runtime).
 
 ## Database Rules
 
@@ -109,13 +120,17 @@ Package-specific:
 - `pgadmin/servers.json` should register `ha_ai_postgres` for local dev, and compose should keep server import enabled on startup.
 - pgAdmin default login and master-password behavior should be configurable via `.env` (`PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`, `PGADMIN_MASTER_PASSWORD_REQUIRED`).
 - pgAdmin registered server password should default from DB env configuration (`PGADMIN_DB_PASSWORD` fallback to `POSTGRES_PASSWORD`).
+- Proxmox deploy/rollback scripts should validate Docker/Compose/env preconditions and persist release state in `/opt/ha-ai/state`.
+- Proxmox backup script should emit `pg_dump -Fc` artifacts and prune by configurable retention days.
 
 ## CI Expectations
 
 - GitHub Actions workflow is defined in `.github/workflows/ci.yml`.
-- `verify` job must run `yarn verify` on push to `main` and pull requests.
+- `verify` job must run `yarn verify` and verify `collector/Dockerfile` image builds on push to `main` and pull requests.
 - `integration-tests` job must run `yarn test` with `TEST_DATABASE_URL` against Postgres 18 so DB-backed suites execute in CI.
+- `publish-pr-image` job in `.github/workflows/ci.yml` should publish GHCR tags `pr-<number>-sha-<sha>` for same-repo pull requests after integration tests pass.
 - CI jobs must enable Corepack and run `corepack install` so the package manager/version comes from the repo `packageManager` field.
+- Image publish workflow is defined in `.github/workflows/publish-image.yml` and should publish GHCR tags `sha-<commit>` and `main-latest` only after CI succeeds on `main`.
 
 ## Dependency Update Automation
 

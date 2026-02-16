@@ -1,0 +1,136 @@
+x-app-image: &app_image ${IMAGE_REPO:-ghcr.io/bob-laz/ha_ai_analyzer}:${IMAGE_TAG:-main-latest}
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: ha_ai_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ha_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-ha_ai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ha_ai_dev_password}
+      TZ: UTC
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./schema:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-ha_ai} -d ${POSTGRES_DB:-ha_ai}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  collector:
+    image: *app_image
+    container_name: ha_ai_collector
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["yarn", "workspace", "@ha-ai/collector", "start:collector"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ha_ai}:${POSTGRES_PASSWORD:-ha_ai_dev_password}@postgres:5432/${POSTGRES_DB:-ha_ai}
+      HA_WS_URL: ${HA_WS_URL:?HA_WS_URL is required}
+      HA_TOKEN: ${HA_TOKEN:?HA_TOKEN is required}
+      EVENT_TYPES: ${EVENT_TYPES:-state_changed,call_service}
+      DOMAIN_ALLOWLIST: ${DOMAIN_ALLOWLIST:-}
+      DOMAIN_EXCLUDELIST: ${DOMAIN_EXCLUDELIST:-automation,updater}
+      BATCH_SIZE: ${BATCH_SIZE:-250}
+      FLUSH_INTERVAL_SECONDS: ${FLUSH_INTERVAL_SECONDS:-2}
+      RECONNECT_INITIAL_SECONDS: ${RECONNECT_INITIAL_SECONDS:-1}
+      RECONNECT_MAX_SECONDS: ${RECONNECT_MAX_SECONDS:-30}
+      RECONNECT_JITTER_RATIO: ${RECONNECT_JITTER_RATIO:-0.2}
+      MAX_BUFFERED_EVENTS: ${MAX_BUFFERED_EVENTS:-5000}
+      OVERFLOW_POLICY: ${OVERFLOW_POLICY:-drop_newest}
+      RETRY_BACKPRESSURE_DELAY_MS: ${RETRY_BACKPRESSURE_DELAY_MS:-250}
+      COLLECTOR_INSTANCE_ID: ${COLLECTOR_INSTANCE_ID:-collector-proxmox}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+  retention:
+    image: *app_image
+    container_name: ha_ai_retention
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["yarn", "workspace", "@ha-ai/tools", "start:retention", "--schedule"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ha_ai}:${POSTGRES_PASSWORD:-ha_ai_dev_password}@postgres:5432/${POSTGRES_DB:-ha_ai}
+      ANALYTICS_TIMEZONE: ${ANALYTICS_TIMEZONE:-UTC}
+      RETENTION_SCHEDULE_TIME: ${RETENTION_SCHEDULE_TIME:-03:30}
+      RETENTION_SCHEDULE_TIMEZONE: ${RETENTION_SCHEDULE_TIMEZONE:-UTC}
+      EVENTS_RETENTION_DAYS: ${EVENTS_RETENTION_DAYS:-14}
+      EVENTS_PARTITION_LOOKBACK_DAYS: ${EVENTS_PARTITION_LOOKBACK_DAYS:-2}
+      EVENTS_PARTITION_PRECREATE_DAYS: ${EVENTS_PARTITION_PRECREATE_DAYS:-14}
+      TRACE_CONTEXTS_RETENTION_DAYS: ${TRACE_CONTEXTS_RETENTION_DAYS:-30}
+      ENTITY_SNAPSHOTS_RETENTION_DAYS: ${ENTITY_SNAPSHOTS_RETENTION_DAYS:-30}
+      AUTOMATION_SNAPSHOTS_RETENTION_DAYS: ${AUTOMATION_SNAPSHOTS_RETENTION_DAYS:-60}
+      AGENT_RUNS_RETENTION_DAYS: ${AGENT_RUNS_RETENTION_DAYS:-180}
+      ORPHAN_ANALYSIS_RESULTS_RETENTION_DAYS: ${ORPHAN_ANALYSIS_RESULTS_RETENTION_DAYS:-180}
+      RETENTION_BATCH_SIZE: ${RETENTION_BATCH_SIZE:-50000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+  analytics:
+    image: *app_image
+    container_name: ha_ai_analytics
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["yarn", "workspace", "@ha-ai/tools", "start:analytics", "--schedule"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ha_ai}:${POSTGRES_PASSWORD:-ha_ai_dev_password}@postgres:5432/${POSTGRES_DB:-ha_ai}
+      REPORT_OUTPUT_DIR: ${REPORT_OUTPUT_DIR:-/app/reports}
+      ANALYTICS_TIMEZONE: ${ANALYTICS_TIMEZONE:-UTC}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-mini}
+      LLM_ANALYSIS_MAX_INSIGHTS: ${LLM_ANALYSIS_MAX_INSIGHTS:-5}
+      LLM_ANALYSIS_WINDOW_HOURS: ${LLM_ANALYSIS_WINDOW_HOURS:-24}
+      LLM_SCHEDULE_TIME: ${LLM_SCHEDULE_TIME:-03:00}
+      LLM_SCHEDULE_TIMEZONE: ${LLM_SCHEDULE_TIMEZONE:-UTC}
+      LLM_MAX_TOP_CHANGES: ${LLM_MAX_TOP_CHANGES:-20}
+      LLM_MAX_TRACE_CONTEXTS: ${LLM_MAX_TRACE_CONTEXTS:-10}
+      LLM_MAX_EVENTS_PER_CONTEXT: ${LLM_MAX_EVENTS_PER_CONTEXT:-60}
+      LLM_TRACE_MAX_DEPTH: ${LLM_TRACE_MAX_DEPTH:-6}
+      LLM_REQUEST_TIMEOUT_MS: ${LLM_REQUEST_TIMEOUT_MS:-30000}
+      LLM_RETRY_MAX_ATTEMPTS: ${LLM_RETRY_MAX_ATTEMPTS:-3}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - analysis_reports:/app/reports
+
+  pgadmin:
+    image: dpage/pgadmin4:9
+    container_name: ha_ai_pgadmin
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-change-me}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: ${PGADMIN_MASTER_PASSWORD_REQUIRED:-False}
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
+      PGADMIN_DB_HOST: ${PGADMIN_DB_HOST:-postgres}
+      PGADMIN_DB_PORT: ${PGADMIN_DB_PORT:-5432}
+      PGADMIN_DB_NAME: ${PGADMIN_DB_NAME:-${POSTGRES_DB:-ha_ai}}
+      PGADMIN_DB_USER: ${PGADMIN_DB_USER:-${POSTGRES_USER:-ha_ai}}
+      PGADMIN_DB_PASSWORD: ${PGADMIN_DB_PASSWORD:-${POSTGRES_PASSWORD:-ha_ai_dev_password}}
+    entrypoint:
+      - /bin/sh
+      - /pgadmin4/bootstrap.sh
+    ports:
+      - "${PGADMIN_PORT_BIND:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - ./pgadmin/bootstrap.sh:/pgadmin4/bootstrap.sh:ro
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  analysis_reports:

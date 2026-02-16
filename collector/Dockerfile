@@ -5,10 +5,12 @@ WORKDIR /app
 RUN corepack enable
 
 COPY package.json ./
+COPY yarn.lock ./yarn.lock
 COPY collector/package.json ./collector/package.json
 COPY tools/package.json ./tools/package.json
 
-RUN yarn install
+RUN corepack install
+RUN yarn install --immutable
 
 COPY collector ./collector
 COPY tools ./tools
