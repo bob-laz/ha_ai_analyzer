@@ -200,8 +200,8 @@ describe.skipIf(!shouldRun)('analysis runner integrations', () => {
        WHERE i.agent_run_id = $1`,
       [result.agentRunId],
     );
-    const recommendationRows = await pool.query<{ status: string }>(
-      'SELECT status FROM recommendations WHERE agent_run_id = $1',
+    const recommendationRows = await pool.query<{ status: string; insight_id: string | null }>(
+      'SELECT status, insight_id::text FROM recommendations WHERE agent_run_id = $1',
       [result.agentRunId],
     );
     const reportRows = await pool.query<{ count: string }>(
@@ -214,6 +214,7 @@ describe.skipIf(!shouldRun)('analysis runner integrations', () => {
     expect(Number(insightRows.rows[0]?.count ?? '0')).toBe(1);
     expect(Number(evidenceRows.rows[0]?.count ?? '0')).toBeGreaterThanOrEqual(1);
     expect(recommendationRows.rows[0]?.status).toBe('proposed');
+    expect(recommendationRows.rows[0]?.insight_id).not.toBeNull();
     expect(Number(reportRows.rows[0]?.count ?? '0')).toBe(1);
   });
 

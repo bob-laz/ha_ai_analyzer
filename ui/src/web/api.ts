@@ -1,6 +1,10 @@
 import type {
   ActionAcceptedResponse,
   ActionOperation,
+  AutomationSnapshotsResponse,
+  EntitySnapshotsResponse,
+  EnvironmentSnapshotsResponse,
+  EnvironmentSnapshotType,
   HealthResponse,
   LatestReportResponse,
   OperationKind,
@@ -61,6 +65,34 @@ const apiRequest = async <T>(path: string, init?: RequestInit): Promise<T> => {
   return (await response.json()) as T;
 };
 
+const apiRequestOptional = async <T>(path: string, init?: RequestInit): Promise<T | null> => {
+  const authHeader = getAuthHeader();
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authHeader ? { Authorization: authHeader } : {}),
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (response.status === 401) {
+    clearApiCredentials();
+    throw new Error('Authentication failed. Re-enter UI credentials.');
+  }
+
+  if (response.status === 204 || response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `Request failed (${response.status})`);
+  }
+
+  return (await response.json()) as T;
+};
+
 export const fetchOverview = (): Promise<OverviewResponse> => {
   return apiRequest<OverviewResponse>('/api/overview');
 };
@@ -101,8 +133,10 @@ export const fetchRecommendations = (params: {
   return apiRequest<RecommendationsResponse>(`/api/recommendations${suffix ? `?${suffix}` : ''}`);
 };
 
-export const fetchLatestReport = (reportType: 'llm_analysis' | 'daily_home_summary'): Promise<LatestReportResponse> => {
-  return apiRequest<LatestReportResponse>(`/api/reports/latest?type=${reportType}`);
+export const fetchLatestReport = (
+  reportType: 'llm_analysis' | 'daily_home_summary',
+): Promise<LatestReportResponse | null> => {
+  return apiRequestOptional<LatestReportResponse>(`/api/reports/latest?type=${reportType}`);
 };
 
 export const fetchRecentEvents = (limit = 200): Promise<RecentEventsResponse> => {
@@ -115,6 +149,60 @@ export const fetchRecentAnomalies = (limit = 30): Promise<RecentAnomaliesRespons
 
 export const fetchResourceUsage = (): Promise<ResourceUsageResponse> => {
   return apiRequest<ResourceUsageResponse>('/api/resource-usage/latest');
+};
+
+export const fetchCurrentAutomationSnapshots = (params: {
+  limit?: number;
+  search?: string;
+}): Promise<AutomationSnapshotsResponse> => {
+  const query = new URLSearchParams();
+  if (params.limit) {
+    query.set('limit', String(params.limit));
+  }
+  if (params.search) {
+    query.set('search', params.search);
+  }
+
+  const suffix = query.toString();
+  return apiRequest<AutomationSnapshotsResponse>(`/api/snapshots/automations/current${suffix ? `?${suffix}` : ''}`);
+};
+
+export const fetchCurrentEnvironmentSnapshots = (params: {
+  snapshotType: EnvironmentSnapshotType;
+  limit?: number;
+  search?: string;
+}): Promise<EnvironmentSnapshotsResponse> => {
+  const query = new URLSearchParams();
+  query.set('type', params.snapshotType);
+  if (params.limit) {
+    query.set('limit', String(params.limit));
+  }
+  if (params.search) {
+    query.set('search', params.search);
+  }
+
+  const suffix = query.toString();
+  return apiRequest<EnvironmentSnapshotsResponse>(`/api/snapshots/environment/current?${suffix}`);
+};
+
+export const fetchCurrentEntitySnapshots = (params: {
+  limit?: number;
+  search?: string;
+  domain?: string;
+}): Promise<EntitySnapshotsResponse> => {
+  const query = new URLSearchParams();
+  if (params.limit) {
+    query.set('limit', String(params.limit));
+  }
+  if (params.search) {
+    query.set('search', params.search);
+  }
+  if (params.domain) {
+    query.set('domain', params.domain);
+  }
+
+  const suffix = query.toString();
+  return apiRequest<EntitySnapshotsResponse>(`/api/snapshots/entities/current${suffix ? `?${suffix}` : ''}`);
 };
 
 export const runAction = async (kind: OperationKind): Promise<ActionOperation> => {

@@ -175,4 +175,219 @@ describe('createServer', () => {
 
     expect(response.statusCode).toBe(409);
   });
+
+  it('returns 204 when no latest report exists for requested type', async () => {
+    const { config, cleanup } = await createTestConfig();
+    cleanups.push(cleanup);
+
+    const db: Queryable = {
+      query: vi.fn(async () => ({ rows: [] })) as Queryable['query'],
+    };
+
+    const app = await createServer({
+      config,
+      db,
+      actionRunner: baseActionRunner(),
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/reports/latest?type=llm_analysis',
+      headers: { authorization: authHeader },
+    });
+
+    expect(response.statusCode).toBe(204);
+  });
+
+  it('returns latest automation snapshots with totals', async () => {
+    const { config, cleanup } = await createTestConfig();
+    cleanups.push(cleanup);
+
+    const db: Queryable = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes('SELECT MAX(captured_at) AS captured_at FROM automation_snapshots')) {
+          return { rows: [{ captured_at: '2026-02-16T00:00:00.000Z' }] };
+        }
+
+        if (sql.includes('COUNT(*)::bigint AS total_count') && sql.includes('FROM automation_snapshots')) {
+          return { rows: [{ total_count: '1' }] };
+        }
+
+        if (sql.includes('FROM automation_snapshots') && sql.includes('trigger_config')) {
+          return {
+            rows: [
+              {
+                id: 7,
+                automation_id: 'automation.kitchen_lights',
+                alias: 'Kitchen lights',
+                is_enabled: true,
+                trigger_config: [],
+                action_config: [],
+                conditions_config: [],
+                metadata: { source: 'test' },
+                captured_at: '2026-02-16T00:00:00.000Z',
+                created_at: '2026-02-16T00:00:01.000Z',
+              },
+            ],
+          };
+        }
+
+        return { rows: [] };
+      }) as Queryable['query'],
+    };
+
+    const app = await createServer({
+      config,
+      db,
+      actionRunner: baseActionRunner(),
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/snapshots/automations/current?limit=10',
+      headers: { authorization: authHeader },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.total).toBe(1);
+    expect(body.snapshots[0].automationId).toBe('automation.kitchen_lights');
+    expect(body.snapshots[0].isEnabled).toBe(true);
+  });
+
+  it('returns script/blueprint environment snapshots from automation_snapshots', async () => {
+    const { config, cleanup } = await createTestConfig();
+    cleanups.push(cleanup);
+
+    const db: Queryable = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes('SELECT MAX(captured_at) AS captured_at') && sql.includes('FROM automation_snapshots')) {
+          return { rows: [{ captured_at: '2026-02-16T04:43:48.288Z' }] };
+        }
+
+        if (sql.includes('COUNT(*)::bigint AS total_count') && sql.includes('FROM automation_snapshots')) {
+          return { rows: [{ total_count: '1' }] };
+        }
+
+        if (sql.includes('FROM automation_snapshots') && sql.includes('AS resource_id')) {
+          return {
+            rows: [
+              {
+                id: 112,
+                snapshot_type: 'script',
+                resource_id: 'script.goodnight_routine',
+                label: 'Goodnight Routine',
+                metadata: { snapshotType: 'script' },
+                captured_at: '2026-02-16T04:43:48.288Z',
+                created_at: '2026-02-16T04:43:48.999Z',
+              },
+            ],
+          };
+        }
+
+        return { rows: [] };
+      }) as Queryable['query'],
+    };
+
+    const app = await createServer({
+      config,
+      db,
+      actionRunner: baseActionRunner(),
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/snapshots/environment/current?type=script&limit=10',
+      headers: { authorization: authHeader },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.snapshotType).toBe('script');
+    expect(body.total).toBe(1);
+    expect(body.snapshots[0].resourceId).toBe('script.goodnight_routine');
+    expect(body.snapshots[0].label).toBe('Goodnight Routine');
+  });
+
+  it('returns inventory environment snapshots from ha_environment_snapshots', async () => {
+    const { config, cleanup } = await createTestConfig();
+    cleanups.push(cleanup);
+
+    const db: Queryable = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes('SELECT MAX(captured_at) AS captured_at') && sql.includes('FROM ha_environment_snapshots')) {
+          return { rows: [{ captured_at: '2026-02-16T04:43:48.288Z' }] };
+        }
+
+        if (sql.includes('COUNT(*)::bigint AS total_count') && sql.includes('FROM ha_environment_snapshots')) {
+          return { rows: [{ total_count: '1' }] };
+        }
+
+        if (sql.includes('FROM ha_environment_snapshots') && sql.includes('resource_id')) {
+          return {
+            rows: [
+              {
+                id: 77,
+                snapshot_type: 'device',
+                resource_id: 'abc123',
+                label: 'Kitchen Sensor',
+                metadata: { manufacturer: 'Acme' },
+                captured_at: '2026-02-16T04:43:48.288Z',
+                created_at: '2026-02-16T04:43:48.999Z',
+              },
+            ],
+          };
+        }
+
+        return { rows: [] };
+      }) as Queryable['query'],
+    };
+
+    const app = await createServer({
+      config,
+      db,
+      actionRunner: baseActionRunner(),
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/snapshots/environment/current?type=device&limit=10',
+      headers: { authorization: authHeader },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.snapshotType).toBe('device');
+    expect(body.total).toBe(1);
+    expect(body.snapshots[0].resourceId).toBe('abc123');
+    expect(body.snapshots[0].label).toBe('Kitchen Sensor');
+  });
+
+  it('rejects unsupported environment snapshot type', async () => {
+    const { config, cleanup } = await createTestConfig();
+    cleanups.push(cleanup);
+
+    const db: Queryable = {
+      query: vi.fn(async () => ({ rows: [] })) as Queryable['query'],
+    };
+
+    const app = await createServer({
+      config,
+      db,
+      actionRunner: baseActionRunner(),
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/snapshots/environment/current?type=unsupported',
+      headers: { authorization: authHeader },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
 });

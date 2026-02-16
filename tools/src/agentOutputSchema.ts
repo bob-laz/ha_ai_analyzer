@@ -25,13 +25,14 @@ export const agentOutputSchema = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['automation_id', 'change_type', 'reasoning'],
+        required: ['automation_id', 'change_type', 'reasoning', 'related_insight_rank'],
         properties: {
           automation_id: { type: 'string' },
           change_type: { type: 'string' },
           reasoning: { type: 'string' },
           proposed_yaml_patch: { type: 'string' },
           estimated_impact: { type: 'string' },
+          related_insight_rank: { type: 'integer', minimum: 1 },
         },
       },
     },

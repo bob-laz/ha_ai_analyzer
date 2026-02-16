@@ -302,6 +302,102 @@ describe('runAnalysis', () => {
       'completeAgentRun',
     ]);
     expect(agentToolsMocks.publishReport).toHaveBeenCalledTimes(1);
+    expect(repo.insertRecommendations).toHaveBeenCalledWith(expect.anything(), 7, [
+      expect.objectContaining({
+        insightId: 11,
+        recommendationType: 'adjust_trigger',
+        targetAutomationId: 'automation.living_room_evening',
+        status: 'proposed',
+      }),
+    ]);
+    expect(repo.completeAgentRun).toHaveBeenCalledWith(
+      expect.anything(),
+      7,
+      expect.objectContaining({
+        llm_analysis: expect.objectContaining({
+          recommendations_requested: 1,
+          recommendations: 1,
+          dropped_recommendations: 0,
+          dropped_recommendation_reasons: {},
+        }),
+      }),
+    );
+  });
+
+  test('drops recommendations whose rank cannot be mapped to inserted insights', async () => {
+    const repo: AnalysisRepo = {
+      createAgentRun: vi.fn(async () => ({ id: 8, runUuid: 'run-uuid-2' })),
+      completeAgentRun: vi.fn(async () => {}),
+      failAgentRun: vi.fn(async () => {}),
+      listTopContextIds: vi.fn(async () => ['ctx-child']),
+      getLatestEnvironmentInventory: vi.fn(async () => null),
+      getLatestResourceUsageSnapshot: vi.fn(async () => null),
+      insertInsights: vi.fn(async () => [{ id: 11, rank: 1 }]),
+      insertEvidence: vi.fn(async () => {}),
+      insertRecommendations: vi.fn(async () => {}),
+    };
+
+    const provider: LLMProvider = {
+      analyze: vi.fn(async () => ({
+        run_id: 'run-uuid-2',
+        generated_at: '2026-01-02T01:00:00.000Z',
+        summary: 'Summary',
+        ranked_insights: [
+          {
+            rank: 1,
+            title: 'Only insight',
+            confidence: 0.8,
+            root_cause: 'Root cause',
+            evidence_ids: ['change:service:light.turn_on'],
+          },
+        ],
+        proposed_automation_changes: [
+          {
+            automation_id: 'automation.unmapped',
+            change_type: 'adjust_trigger',
+            reasoning: 'Unmapped rank',
+            related_insight_rank: 99,
+          },
+        ],
+      })),
+    };
+
+    await runAnalysis(
+      createFakePool(),
+      provider,
+      {
+        runType: 'llm_analysis',
+        timezone: 'UTC',
+        windowHours: 24,
+        maxInsights: 5,
+        maxTopChanges: 20,
+        maxTraceContexts: 10,
+        maxEventsPerContext: 60,
+        traceMaxDepth: 6,
+        maxEnvironmentItemsPerType: 50,
+        maxResourceUsageItemsPerType: 20,
+      },
+      {
+        repo,
+        now: () => new Date('2026-01-02T01:00:00.000Z'),
+      },
+    );
+
+    expect(repo.insertRecommendations).toHaveBeenCalledWith(expect.anything(), 8, []);
+    expect(repo.completeAgentRun).toHaveBeenCalledWith(
+      expect.anything(),
+      8,
+      expect.objectContaining({
+        llm_analysis: expect.objectContaining({
+          recommendations_requested: 1,
+          recommendations: 0,
+          dropped_recommendations: 1,
+          dropped_recommendation_reasons: {
+            missing_rank_mapping: 1,
+          },
+        }),
+      }),
+    );
   });
 
   test('marks run failed when provider throws', async () => {

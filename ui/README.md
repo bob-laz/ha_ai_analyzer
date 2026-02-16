@@ -56,6 +56,9 @@ Protected by HTTP basic auth (`UI_BASIC_AUTH_USERNAME` / `UI_BASIC_AUTH_PASSWORD
 - `GET /api/events/recent`
 - `GET /api/anomalies/recent`
 - `GET /api/resource-usage/latest`
+- `GET /api/snapshots/automations/current`
+- `GET /api/snapshots/environment/current`
+- `GET /api/snapshots/entities/current`
 - `GET /api/health`
 - `POST /api/actions/run-analysis`
 - `POST /api/actions/run-daily-summary`
@@ -63,6 +66,11 @@ Protected by HTTP basic auth (`UI_BASIC_AUTH_USERNAME` / `UI_BASIC_AUTH_PASSWORD
 - `POST /api/actions/run-retention`
 - `GET /api/actions/:id`
 - `PATCH /api/recommendations/:id`
+
+Snapshot source mapping:
+- `GET /api/snapshots/environment/current?type=automation|script|scene|blueprint` reads from `automation_snapshots`.
+- `GET /api/snapshots/environment/current?type=device|service|integration|addon` reads from `ha_environment_snapshots`.
+- `GET /api/snapshots/entities/current` reads from `entity_snapshots`.
 
 ## Scripts
 

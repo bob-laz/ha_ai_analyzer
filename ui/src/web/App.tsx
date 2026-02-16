@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, NavLink, Route, Routes } from 'react-router-do
 
 import type {
   ActionOperation,
+  EnvironmentSnapshotType,
   OperationKind,
   RecentEventRow,
   RecommendationRow,
@@ -12,6 +13,9 @@ import type {
 import {
   clearApiCredentials,
   fetchAction,
+  fetchCurrentAutomationSnapshots,
+  fetchCurrentEntitySnapshots,
+  fetchCurrentEnvironmentSnapshots,
   fetchHealth,
   fetchLatestReport,
   fetchOverview,
@@ -57,6 +61,7 @@ const NAV_ITEMS = [
   { to: '/recommendations', label: 'Recommendations' },
   { to: '/reports', label: 'Reports' },
   { to: '/events', label: 'Events' },
+  { to: '/snapshots', label: 'Snapshots' },
   { to: '/usage', label: 'Usage' },
 ] as const;
 
@@ -135,7 +140,6 @@ const statusClass = (status: string): string => {
 const usePollingState = <T,>(
   loader: () => Promise<T>,
   pollIntervalMs: number,
-  deps: ReadonlyArray<unknown>,
 ): AsyncState<T> & { refresh: () => Promise<void> } => {
   const [state, setState] = useState<AsyncState<T>>({
     data: null,
@@ -183,7 +187,7 @@ const usePollingState = <T,>(
       active = false;
       clearInterval(interval);
     };
-  }, [loader, pollIntervalMs, ...deps]);
+  }, [loader, pollIntervalMs]);
 
   return { ...state, refresh };
 };
@@ -309,9 +313,10 @@ const DashboardPage = ({
   onTriggerAction: (kind: OperationKind, label: string) => void;
   operations: ActionOperation[];
 }): ReactElement => {
-  const overview = usePollingState(fetchOverview, pollIntervalMs, []);
-  const health = usePollingState(fetchHealth, pollIntervalMs, []);
-  const anomalies = usePollingState(() => fetchRecentAnomalies(6), pollIntervalMs, []);
+  const loadRecentAnomalies = useCallback(() => fetchRecentAnomalies(6), []);
+  const overview = usePollingState(fetchOverview, pollIntervalMs);
+  const health = usePollingState(fetchHealth, pollIntervalMs);
+  const anomalies = usePollingState(loadRecentAnomalies, pollIntervalMs);
 
   return (
     <section className="page">
@@ -453,7 +458,7 @@ const RunsPage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactElement 
     () => fetchRuns({ limit: 80, runType: runType || undefined, status: status || undefined }),
     [runType, status],
   );
-  const runs = usePollingState(loader, pollIntervalMs, [runType, status]);
+  const runs = usePollingState(loader, pollIntervalMs);
 
   return (
     <section className="page">
@@ -748,8 +753,8 @@ const ReportsPage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactEleme
   const [showRaw, setShowRaw] = useState(false);
   const [state, setState] = useState<
     AsyncState<{
-      llm: Awaited<ReturnType<typeof fetchLatestReport>> | null;
-      daily: Awaited<ReturnType<typeof fetchLatestReport>> | null;
+      llm: Awaited<ReturnType<typeof fetchLatestReport>>;
+      daily: Awaited<ReturnType<typeof fetchLatestReport>>;
     }>
   >({
     data: null,
@@ -762,7 +767,7 @@ const ReportsPage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactEleme
 
     const run = async (): Promise<void> => {
       try {
-        const [llmResult, dailyResult] = await Promise.allSettled([
+        const [llm, daily] = await Promise.all([
           fetchLatestReport('llm_analysis'),
           fetchLatestReport('daily_home_summary'),
         ]);
@@ -773,8 +778,8 @@ const ReportsPage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactEleme
 
         setState({
           data: {
-            llm: llmResult.status === 'fulfilled' ? llmResult.value : null,
-            daily: dailyResult.status === 'fulfilled' ? dailyResult.value : null,
+            llm,
+            daily,
           },
           loading: false,
           error: null,
@@ -850,7 +855,8 @@ const ReportsPage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactEleme
 };
 
 const EventsPage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactElement => {
-  const eventsState = usePollingState(() => fetchRecentEvents(250), pollIntervalMs, []);
+  const loadRecentEvents = useCallback(() => fetchRecentEvents(250), []);
+  const eventsState = usePollingState(loadRecentEvents, pollIntervalMs);
   const [domainFilter, setDomainFilter] = useState('');
   const [entityFilter, setEntityFilter] = useState('');
   const [serviceFilter, setServiceFilter] = useState('');
@@ -859,15 +865,30 @@ const EventsPage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactElemen
 
   const filteredEvents = useMemo(() => {
     const rows = eventsState.data?.events ?? [];
+    const domainQuery = domainFilter.trim().toLowerCase();
+    const entityQuery = entityFilter.trim().toLowerCase();
+    const serviceQuery = serviceFilter.trim().toLowerCase();
+    const contextQuery = contextFilter.trim().toLowerCase();
 
     return rows.filter((row) => {
-      const domainOk = !domainFilter || (row.domain ?? '').includes(domainFilter);
-      const entityOk = !entityFilter || (row.entityId ?? '').includes(entityFilter);
-      const serviceOk = !serviceFilter || (row.service ?? '').includes(serviceFilter);
-      const contextOk = !contextFilter || (row.contextId ?? '').includes(contextFilter);
+      const domainOk = !domainQuery || (row.domain ?? '').toLowerCase().includes(domainQuery);
+      const entityOk = !entityQuery || (row.entityId ?? '').toLowerCase().includes(entityQuery);
+      const serviceOk = !serviceQuery || (row.service ?? '').toLowerCase().includes(serviceQuery);
+      const contextOk = !contextQuery || (row.contextId ?? '').toLowerCase().includes(contextQuery);
       return domainOk && entityOk && serviceOk && contextOk;
     });
   }, [contextFilter, domainFilter, entityFilter, eventsState.data?.events, serviceFilter]);
+
+  useEffect(() => {
+    if (!selectedEvent) {
+      return;
+    }
+
+    const stillVisible = filteredEvents.some((row) => row.id === selectedEvent.id);
+    if (!stillVisible) {
+      setSelectedEvent(null);
+    }
+  }, [filteredEvents, selectedEvent]);
 
   return (
     <section className="page">
@@ -913,24 +934,32 @@ const EventsPage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactElemen
               </tr>
             </thead>
             <tbody>
-              {filteredEvents.map((row) => {
-                return (
-                  <tr
-                    key={row.id}
-                    className={selectedEvent?.id === row.id ? 'row-selected' : ''}
-                    onClick={() => {
-                      setSelectedEvent(row);
-                    }}
-                  >
-                    <td>{formatDateTime(row.eventTime)}</td>
-                    <td>{row.eventType}</td>
-                    <td>{row.domain || '-'}</td>
-                    <td className="mono">{row.entityId || '-'}</td>
-                    <td>{row.service || '-'}</td>
-                    <td className="mono">{row.contextId || '-'}</td>
-                  </tr>
-                );
-              })}
+              {filteredEvents.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="muted">
+                    No events match the current filters.
+                  </td>
+                </tr>
+              ) : (
+                filteredEvents.map((row) => {
+                  return (
+                    <tr
+                      key={row.id}
+                      className={selectedEvent?.id === row.id ? 'row-selected' : ''}
+                      onClick={() => {
+                        setSelectedEvent(row);
+                      }}
+                    >
+                      <td>{formatDateTime(row.eventTime)}</td>
+                      <td>{row.eventType}</td>
+                      <td>{row.domain || '-'}</td>
+                      <td className="mono">{row.entityId || '-'}</td>
+                      <td>{row.service || '-'}</td>
+                      <td className="mono">{row.contextId || '-'}</td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -953,6 +982,414 @@ const EventsPage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactElemen
           </aside>
         ) : null}
       </section>
+    </section>
+  );
+};
+
+const parseLimitInput = (value: string, fallback = 200): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.min(500, Math.floor(parsed));
+};
+
+const AutomationSnapshotsPane = ({
+  pollIntervalMs,
+  limit,
+  search,
+}: {
+  pollIntervalMs: number;
+  limit: number;
+  search: string;
+}): ReactElement => {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const loader = useCallback(() => {
+    return fetchCurrentAutomationSnapshots({ limit, search: search || undefined });
+  }, [limit, search]);
+  const state = usePollingState(loader, pollIntervalMs);
+
+  return (
+    <section className="panel">
+      <header className="panel__header">
+        <h3>Automation Snapshots</h3>
+        <p>
+          Latest capture: {formatDateTime(state.data?.capturedAt ?? null)} · Showing {state.data?.snapshots.length ?? 0}
+          {' / '}
+          {formatNumber(state.data?.total ?? 0)}
+        </p>
+      </header>
+
+      <button
+        type="button"
+        className="button button--ghost"
+        onClick={() => {
+          void state.refresh();
+        }}
+      >
+        Refresh
+      </button>
+
+      {state.error ? <p className="error-text">{state.error}</p> : null}
+      {state.loading && !state.data ? <p className="muted">Loading snapshots...</p> : null}
+
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Automation</th>
+              <th>Alias</th>
+              <th>Enabled</th>
+              <th>Captured</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(state.data?.snapshots ?? []).length === 0 ? (
+              <tr>
+                <td colSpan={6} className="muted">
+                  No automation snapshots found for the latest capture.
+                </td>
+              </tr>
+            ) : (
+              (state.data?.snapshots ?? []).map((row) => {
+                const expanded = expandedId === row.id;
+                return (
+                  <tr key={row.id}>
+                    <td>{row.id}</td>
+                    <td className="mono">{row.automationId}</td>
+                    <td>{row.alias || '-'}</td>
+                    <td>{row.isEnabled === null ? 'unknown' : row.isEnabled ? 'enabled' : 'disabled'}</td>
+                    <td>{formatDateTime(row.capturedAt)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="button button--tiny"
+                        onClick={() => {
+                          setExpandedId(expanded ? null : row.id);
+                        }}
+                      >
+                        {expanded ? 'Hide' : 'Show'}
+                      </button>
+                      {expanded ? (
+                        <pre className="json-preview">
+                          {JSON.stringify(
+                            {
+                              triggerConfig: row.triggerConfig,
+                              actionConfig: row.actionConfig,
+                              conditionsConfig: row.conditionsConfig,
+                              metadata: row.metadata,
+                            },
+                            null,
+                            2,
+                          )}
+                        </pre>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+};
+
+const EnvironmentSnapshotsPane = ({
+  pollIntervalMs,
+  limit,
+  search,
+  snapshotType,
+}: {
+  pollIntervalMs: number;
+  limit: number;
+  search: string;
+  snapshotType: Extract<EnvironmentSnapshotType, 'blueprint' | 'script'>;
+}): ReactElement => {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const loader = useCallback(() => {
+    return fetchCurrentEnvironmentSnapshots({
+      snapshotType,
+      limit,
+      search: search || undefined,
+    });
+  }, [limit, search, snapshotType]);
+  const state = usePollingState(loader, pollIntervalMs);
+
+  return (
+    <section className="panel">
+      <header className="panel__header">
+        <h3>{snapshotType === 'blueprint' ? 'Blueprint Snapshots' : 'Script Snapshots'}</h3>
+        <p>
+          Latest capture: {formatDateTime(state.data?.capturedAt ?? null)} · Showing {state.data?.snapshots.length ?? 0}
+          {' / '}
+          {formatNumber(state.data?.total ?? 0)}
+        </p>
+      </header>
+
+      <button
+        type="button"
+        className="button button--ghost"
+        onClick={() => {
+          void state.refresh();
+        }}
+      >
+        Refresh
+      </button>
+
+      {state.error ? <p className="error-text">{state.error}</p> : null}
+      {state.loading && !state.data ? <p className="muted">Loading snapshots...</p> : null}
+
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Type</th>
+              <th>Resource</th>
+              <th>Label</th>
+              <th>Captured</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(state.data?.snapshots ?? []).length === 0 ? (
+              <tr>
+                <td colSpan={6} className="muted">
+                  No {snapshotType} snapshots found for the latest capture.
+                </td>
+              </tr>
+            ) : (
+              (state.data?.snapshots ?? []).map((row) => {
+                const expanded = expandedId === row.id;
+                return (
+                  <tr key={row.id}>
+                    <td>{row.id}</td>
+                    <td>{row.snapshotType}</td>
+                    <td className="mono">{row.resourceId}</td>
+                    <td>{row.label || '-'}</td>
+                    <td>{formatDateTime(row.capturedAt)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="button button--tiny"
+                        onClick={() => {
+                          setExpandedId(expanded ? null : row.id);
+                        }}
+                      >
+                        {expanded ? 'Hide' : 'Show'}
+                      </button>
+                      {expanded ? <pre className="json-preview">{JSON.stringify(row.metadata, null, 2)}</pre> : null}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+};
+
+const EntitySnapshotsPane = ({
+  pollIntervalMs,
+  limit,
+  search,
+  domain,
+}: {
+  pollIntervalMs: number;
+  limit: number;
+  search: string;
+  domain: string;
+}): ReactElement => {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const loader = useCallback(() => {
+    return fetchCurrentEntitySnapshots({
+      limit,
+      search: search || undefined,
+      domain: domain || undefined,
+    });
+  }, [domain, limit, search]);
+  const state = usePollingState(loader, pollIntervalMs);
+
+  return (
+    <section className="panel">
+      <header className="panel__header">
+        <h3>Entity Snapshots</h3>
+        <p>
+          Latest captured row: {formatDateTime(state.data?.latestCapturedAt ?? null)} · Showing{' '}
+          {state.data?.snapshots.length ?? 0} / {formatNumber(state.data?.total ?? 0)}
+        </p>
+      </header>
+
+      <button
+        type="button"
+        className="button button--ghost"
+        onClick={() => {
+          void state.refresh();
+        }}
+      >
+        Refresh
+      </button>
+
+      {state.error ? <p className="error-text">{state.error}</p> : null}
+      {state.loading && !state.data ? <p className="muted">Loading snapshots...</p> : null}
+
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Entity</th>
+              <th>Domain</th>
+              <th>State</th>
+              <th>Captured</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(state.data?.snapshots ?? []).length === 0 ? (
+              <tr>
+                <td colSpan={6} className="muted">
+                  No entity snapshots found for the current filter.
+                </td>
+              </tr>
+            ) : (
+              (state.data?.snapshots ?? []).map((row) => {
+                const expanded = expandedId === row.id;
+                return (
+                  <tr key={row.id}>
+                    <td>{row.id}</td>
+                    <td className="mono">{row.entityId}</td>
+                    <td>{row.domain || '-'}</td>
+                    <td>{row.state || '-'}</td>
+                    <td>{formatDateTime(row.capturedAt)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="button button--tiny"
+                        onClick={() => {
+                          setExpandedId(expanded ? null : row.id);
+                        }}
+                      >
+                        {expanded ? 'Hide' : 'Show'}
+                      </button>
+                      {expanded ? (
+                        <pre className="json-preview">
+                          {JSON.stringify(
+                            {
+                              contextId: row.contextId,
+                              sourceEventId: row.sourceEventId,
+                              attributes: row.attributes,
+                            },
+                            null,
+                            2,
+                          )}
+                        </pre>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+};
+
+const SnapshotsPage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactElement => {
+  const [view, setView] = useState<'automation' | 'blueprint' | 'script' | 'entity'>('automation');
+  const [search, setSearch] = useState('');
+  const [domain, setDomain] = useState('');
+  const [limitInput, setLimitInput] = useState('200');
+  const limit = parseLimitInput(limitInput, 200);
+
+  return (
+    <section className="page">
+      <header className="page-header">
+        <div>
+          <h2>Snapshot Explorer</h2>
+          <p>Inspect latest automation, blueprint, script, and entity snapshot rows stored in Postgres.</p>
+        </div>
+      </header>
+
+      <section className="panel">
+        <div className="toolbar toolbar--filters">
+          <label>
+            Snapshot Type
+            <select
+              value={view}
+              onChange={(event) => {
+                setView(event.target.value as 'automation' | 'blueprint' | 'script' | 'entity');
+              }}
+            >
+              <option value="automation">Automation</option>
+              <option value="blueprint">Blueprint</option>
+              <option value="script">Script</option>
+              <option value="entity">Entity</option>
+            </select>
+          </label>
+          <label>
+            Search
+            <input
+              value={search}
+              placeholder="resource id, alias, or state"
+              onChange={(event) => {
+                setSearch(event.target.value);
+              }}
+            />
+          </label>
+          <label>
+            Limit
+            <input
+              value={limitInput}
+              type="number"
+              min={1}
+              max={500}
+              onChange={(event) => {
+                setLimitInput(event.target.value);
+              }}
+            />
+          </label>
+          {view === 'entity' ? (
+            <label>
+              Domain
+              <input
+                value={domain}
+                placeholder="light"
+                onChange={(event) => {
+                  setDomain(event.target.value);
+                }}
+              />
+            </label>
+          ) : null}
+        </div>
+      </section>
+
+      {view === 'automation' ? (
+        <AutomationSnapshotsPane pollIntervalMs={pollIntervalMs} limit={limit} search={search} />
+      ) : null}
+      {view === 'blueprint' ? (
+        <EnvironmentSnapshotsPane
+          pollIntervalMs={pollIntervalMs}
+          limit={limit}
+          search={search}
+          snapshotType="blueprint"
+        />
+      ) : null}
+      {view === 'script' ? (
+        <EnvironmentSnapshotsPane pollIntervalMs={pollIntervalMs} limit={limit} search={search} snapshotType="script" />
+      ) : null}
+      {view === 'entity' ? (
+        <EntitySnapshotsPane pollIntervalMs={pollIntervalMs} limit={limit} search={search} domain={domain} />
+      ) : null}
     </section>
   );
 };
@@ -986,7 +1423,7 @@ const UsageCard = ({ label, readings }: { label: string; readings: ResourceUsage
 };
 
 const UsagePage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactElement => {
-  const usage = usePollingState(fetchResourceUsage, pollIntervalMs, []);
+  const usage = usePollingState(fetchResourceUsage, pollIntervalMs);
 
   return (
     <section className="page">
@@ -1170,6 +1607,7 @@ export const App = ({ defaultPollIntervalMs }: AppProps): ReactElement => {
               />
               <Route path="/reports" element={<ReportsPage pollIntervalMs={defaultPollIntervalMs} />} />
               <Route path="/events" element={<EventsPage pollIntervalMs={defaultPollIntervalMs} />} />
+              <Route path="/snapshots" element={<SnapshotsPage pollIntervalMs={defaultPollIntervalMs} />} />
               <Route path="/usage" element={<UsagePage pollIntervalMs={defaultPollIntervalMs} />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

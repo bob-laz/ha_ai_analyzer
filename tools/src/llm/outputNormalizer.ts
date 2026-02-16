@@ -51,6 +51,22 @@ const asInteger = (value: unknown): number | null => {
   return Math.floor(parsed);
 };
 
+const asPositiveInteger = (value: unknown): number | null => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1) {
+    return null;
+  }
+  return parsed;
+};
+
+const asRequiredPositiveInteger = (value: unknown, field: string): number => {
+  const parsed = asPositiveInteger(value);
+  if (parsed === null) {
+    throw new AgentOutputValidationError(`${field} must be a positive integer`);
+  }
+  return parsed;
+};
+
 const parseInsight = (raw: unknown, fallbackRank: number): NormalizedInsight => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new AgentOutputValidationError('ranked_insights items must be objects');
@@ -97,7 +113,10 @@ const parseRecommendation = (raw: unknown): NormalizedRecommendation => {
     reasoning: asString(recommendation.reasoning, 'proposed_automation_changes[].reasoning'),
     proposedYamlPatch: asOptionalString(recommendation.proposed_yaml_patch),
     estimatedImpact: asOptionalString(recommendation.estimated_impact),
-    relatedInsightRank: asInteger(recommendation.related_insight_rank),
+    relatedInsightRank: asRequiredPositiveInteger(
+      recommendation.related_insight_rank,
+      'proposed_automation_changes[].related_insight_rank',
+    ),
   };
 };
 

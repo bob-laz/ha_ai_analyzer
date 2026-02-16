@@ -21,3 +21,4 @@ dist/
 coverage/
 *.tsbuildinfo
 reports/*.json
+tmp/

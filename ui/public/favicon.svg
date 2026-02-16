@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f2942" />
+      <stop offset="100%" stop-color="#0a4a73" />
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)" />
+  <text
+    x="32"
+    y="30"
+    text-anchor="middle"
+    font-family="Arial, sans-serif"
+    font-size="18"
+    font-weight="700"
+    letter-spacing="1"
+    fill="#d8e5f2"
+  >
+    HA
+  </text>
+  <text
+    x="32"
+    y="49"
+    text-anchor="middle"
+    font-family="Arial, sans-serif"
+    font-size="18"
+    font-weight="700"
+    letter-spacing="1"
+    fill="#d8e5f2"
+  >
+    AI
+  </text>
+</svg>
