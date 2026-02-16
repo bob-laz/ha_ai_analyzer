@@ -86,9 +86,10 @@ Proxmox operations (run on VM):
 4. Domain allowlist/excludelist filtering must be enforced before writes.
 5. Event ingestion must remain idempotent via `dedupe_key`.
 6. Collector normalization should resolve call-service targets from `service_data.entity_id` / `target.entity_id` (string or array) when present, and attempt device-based enrichment from `service_data.device_id` / `target.device_id` via HA entity registry when needed.
-7. Collector should drop `state_changed` events where `old_state.state == new_state.state`.
-8. Collector should keep `binary_sensor` motion events only for `off -> on` transitions.
-9. Production deployment should use immutable GHCR image tags via `docker-compose.prod.yml` (no source bind-mount runtime).
+7. Collector CSV/list env parsing for `EVENT_TYPES`, `DOMAIN_ALLOWLIST`, and `DOMAIN_EXCLUDELIST` should remain case-insensitive and tolerant of quotes/extra whitespace.
+8. Collector should drop `state_changed` events where `old_state.state == new_state.state`.
+9. Collector should keep `binary_sensor` motion events only for `off -> on` transitions.
+10. Production deployment should use immutable GHCR image tags via `docker-compose.prod.yml` (no source bind-mount runtime).
 
 ## Database Rules
 

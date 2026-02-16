@@ -65,6 +65,7 @@ Collector ingest defaults include noise suppression for Home Assistant event spa
 - drop `state_changed` records where `old_state.state` equals `new_state.state`
 - keep `binary_sensor` motion records only for `off -> on` transitions
 - enrich `call_service.entity_id` from `service_data.device_id` / `target.device_id` using HA entity registry mappings when direct `entity_id` is missing
+- normalize `EVENT_TYPES`, `DOMAIN_ALLOWLIST`, and `DOMAIN_EXCLUDELIST` values case-insensitively (quote/whitespace tolerant) before filtering
 
 ## Repository Layout
 

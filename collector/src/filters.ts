@@ -55,11 +55,13 @@ const extractStateChange = (
 };
 
 export const isAllowed = (event: NormalizedEvent, allowlist: Set<string>, excludelist: Set<string>): boolean => {
-  if (event.domain && excludelist.has(event.domain)) {
+  const normalizedDomain = event.domain?.toLowerCase() ?? null;
+
+  if (normalizedDomain && excludelist.has(normalizedDomain)) {
     return false;
   }
 
-  if (allowlist.size > 0 && (!event.domain || !allowlist.has(event.domain))) {
+  if (allowlist.size > 0 && (!normalizedDomain || !allowlist.has(normalizedDomain))) {
     return false;
   }
 

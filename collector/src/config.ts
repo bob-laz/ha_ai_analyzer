@@ -2,19 +2,23 @@ import os from 'node:os';
 
 export type OverflowPolicy = 'drop_newest' | 'drop_oldest' | 'retry';
 
-const csvToSet = (value: string): Set<string> =>
-  new Set(
-    value
-      .split(',')
-      .map((part) => part.trim())
-      .filter(Boolean),
-  );
-
-const csvToArray = (value: string): string[] =>
+const normalizeToken = (value: string): string =>
   value
-    .split(',')
-    .map((part) => part.trim())
+    .trim()
+    .replace(/^['"]+/, '')
+    .replace(/['"]+$/, '')
+    .trim()
+    .toLowerCase();
+
+const splitList = (value: string): string[] =>
+  value
+    .split(/[,\n\r\t ]+/)
+    .map((part) => normalizeToken(part))
     .filter(Boolean);
+
+const csvToSet = (value: string): Set<string> => new Set(splitList(value));
+
+const csvToArray = (value: string): string[] => splitList(value);
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
   if (value === undefined) {

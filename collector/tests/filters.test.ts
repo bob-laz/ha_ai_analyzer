@@ -105,6 +105,17 @@ describe('isAllowed', () => {
     expect(isAllowed(event, new Set(['binary_sensor']), new Set())).toBe(false);
   });
 
+  test('matches allowlist/excludelist case-insensitively against event domain', () => {
+    const event = baseEvent({
+      domain: 'Light',
+      entityId: 'light.kitchen',
+      data: stateChangedPayload('off', 'on'),
+    });
+
+    expect(isAllowed(event, new Set(['light']), new Set())).toBe(true);
+    expect(isAllowed(event, new Set(), new Set(['light']))).toBe(false);
+  });
+
   test('applies same-state drop even when domain is allowlisted', () => {
     const event = baseEvent({
       domain: 'climate',
