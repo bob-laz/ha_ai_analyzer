@@ -46,6 +46,7 @@ yarn dev:collector --mode=dev-ha
 
 Normalization note:
 - `call_service` events resolve `entityId` from `service_data.entity_id` / `target.entity_id` when provided as string or array.
+- when `entity_id` is absent, collector attempts enrichment from `service_data.device_id` / `target.device_id` using Home Assistant entity registry mappings.
 
 Default noise filters:
 - `state_changed` events are dropped when `old_state.state == new_state.state`.

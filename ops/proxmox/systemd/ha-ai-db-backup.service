@@ -1,0 +1,12 @@
+[Unit]
+Description=HA AI Postgres backup
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=APP_DIR=/opt/ha-ai/app
+Environment=ENV_FILE=/opt/ha-ai/.env.prod
+Environment=BACKUP_DIR=/opt/ha-ai/backups
+ExecStart=/opt/ha-ai/app/ops/proxmox/backup-db.sh

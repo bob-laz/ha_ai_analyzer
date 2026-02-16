@@ -1,0 +1,15 @@
+.git
+.github
+.vscode
+node_modules
+collector/node_modules
+tools/node_modules
+collector/dist
+tools/dist
+reports
+.env
+.env.*
+.dev-ha.token
+*.log
+.yarn/unplugged
+.yarn/install-state.gz

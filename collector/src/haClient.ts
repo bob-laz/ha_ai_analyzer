@@ -3,7 +3,7 @@ import { type RawData, WebSocket } from 'ws';
 import type { CollectorConfig } from './config.js';
 import { BufferOverflowError } from './db.js';
 import { isAllowed } from './filters.js';
-import { normalizeEvent } from './normalize.js';
+import { extractTargetDeviceIds, normalizeEvent } from './normalize.js';
 import type { EventWriter, HARawMessage } from './types.js';
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -213,6 +213,8 @@ export class HAEventCollector {
   private running = true;
   private nextMessageId = 1;
   private activeSocket: WebSocket | null = null;
+  private hasAttemptedEntityRegistryLoad = false;
+  private readonly entityIdsByDeviceId = new Map<string, string[]>();
 
   constructor(
     private readonly config: CollectorConfig,
@@ -263,7 +265,7 @@ export class HAEventCollector {
     try {
       await this.authenticate(ws, router);
       await this.subscribe(ws, router);
-      await this.consume(router);
+      await this.consume(ws, router);
     } finally {
       router.shutdown();
       this.activeSocket = null;
@@ -326,14 +328,84 @@ export class HAEventCollector {
     }
   }
 
-  private async consume(router: MessageRouter): Promise<void> {
+  private resolveEntityFromDeviceIds = (deviceIds: string[]): string | null => {
+    for (const deviceId of deviceIds) {
+      const mappedEntityIds = this.entityIdsByDeviceId.get(deviceId);
+      if (!mappedEntityIds || mappedEntityIds.length === 0) {
+        continue;
+      }
+      const first = mappedEntityIds[0];
+      if (first && first.trim().length > 0) {
+        return first;
+      }
+    }
+    return null;
+  };
+
+  private async loadEntityRegistry(ws: WebSocket, router: MessageRouter): Promise<void> {
+    if (this.hasAttemptedEntityRegistryLoad) {
+      return;
+    }
+    this.hasAttemptedEntityRegistryLoad = true;
+
+    const id = this.nextId();
+    this.sendJson(ws, { id, type: 'config/entity_registry/list' });
+
+    try {
+      const result = await router.waitForResult(id, 3000);
+      if (result.type !== 'result' || result.success !== true || !Array.isArray(result.result)) {
+        console.warn('entity registry lookup unavailable; continuing without device_id enrichment');
+        return;
+      }
+
+      for (const entry of result.result) {
+        if (!entry || typeof entry !== 'object') {
+          continue;
+        }
+        const entityId = (entry as { entity_id?: unknown }).entity_id;
+        const deviceId = (entry as { device_id?: unknown }).device_id;
+        if (typeof entityId !== 'string' || typeof deviceId !== 'string') {
+          continue;
+        }
+
+        const existing = this.entityIdsByDeviceId.get(deviceId);
+        if (existing) {
+          if (!existing.includes(entityId)) {
+            existing.push(entityId);
+          }
+          continue;
+        }
+        this.entityIdsByDeviceId.set(deviceId, [entityId]);
+      }
+    } catch (error) {
+      console.warn('entity registry lookup timed out; continuing without device_id enrichment', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async consume(ws: WebSocket, router: MessageRouter): Promise<void> {
     while (this.running) {
       const message = await router.nextEvent();
       if (message.type !== 'event' || !message.event) {
         continue;
       }
 
-      const normalized = normalizeEvent(message);
+      let normalized = normalizeEvent(message, {
+        resolveEntityFromDeviceIds: this.resolveEntityFromDeviceIds,
+      });
+
+      if (normalized.eventType === 'call_service' && normalized.entityId === null) {
+        const eventData = (message.event.data ?? {}) as Record<string, unknown>;
+        const deviceIds = extractTargetDeviceIds(eventData);
+        if (deviceIds.length > 0) {
+          await this.loadEntityRegistry(ws, router);
+          normalized = normalizeEvent(message, {
+            resolveEntityFromDeviceIds: this.resolveEntityFromDeviceIds,
+          });
+        }
+      }
+
       if (!isAllowed(normalized, this.config.domainAllowlist, this.config.domainExcludelist)) {
         continue;
       }

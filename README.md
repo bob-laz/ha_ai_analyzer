@@ -12,6 +12,7 @@ This project has two runtime components:
 Collector ingest defaults include noise suppression for Home Assistant event spam:
 - drop `state_changed` records where `old_state.state` equals `new_state.state`
 - keep `binary_sensor` motion records only for `off -> on` transitions
+- enrich `call_service.entity_id` from `service_data.device_id` / `target.device_id` using HA entity registry mappings when direct `entity_id` is missing
 
 ## Repository Layout
 
@@ -20,6 +21,8 @@ Collector ingest defaults include noise suppression for Home Assistant event spa
 - `schema/` baseline SQL bootstrap (`001_init.sql`)
 - `scripts/` local development scripts
 - `docker-compose.yml` local containers and profiles
+- `docker-compose.prod.yml` Proxmox production stack
+- `ops/proxmox/` bootstrap/deploy/rollback/backup automation
 - `docs/architecture.md` runtime architecture
 - `docs/data-contracts.md` table and tool contracts
 - `docs/capability-matrix.md` implemented vs stubbed tools
@@ -34,6 +37,7 @@ For package-specific commands, environment variables, and troubleshooting:
 ## Onboarding Guides
 
 - LAN Home Assistant onboarding: `docs/onboarding-lan.md`
+- Proxmox production deployment: `docs/deploy-proxmox.md`
 
 ## Runtime Prerequisites
 
@@ -111,6 +115,7 @@ yarn start:analysis:scheduler
 - CI workflow: `.github/workflows/ci.yml`
   - `verify` job runs `yarn verify`
   - `integration-tests` runs DB-backed suites with Postgres 18
+  - `publish-pr-image` builds and publishes PR test images to GHCR with tags `pr-<number>-sha-<sha>` (same-repo PRs only)
 - Dependabot config: `.github/dependabot.yml`
 - Dependabot auto-merge workflow: `.github/workflows/dependabot-automerge.yml`
 
@@ -119,3 +124,16 @@ yarn start:analysis:scheduler
 - Bring up local services: `yarn dev:db:up`
 - Tear down local services and volumes across active profiles: `yarn dev:down`
 - Baseline schema is applied from `schema/001_init.sql` on fresh Postgres volume initialization.
+
+## Production Deployment (Proxmox Debian 13 VM)
+
+- Production compose file: `/Users/bob/code/homeassistant/ha_ai_analyzer/docker-compose.prod.yml`
+- Production env template: `/Users/bob/code/homeassistant/ha_ai_analyzer/.env.prod.example`
+- VM operations scripts: `/Users/bob/code/homeassistant/ha_ai_analyzer/ops/proxmox/`
+  - `/Users/bob/code/homeassistant/ha_ai_analyzer/ops/proxmox/bootstrap.sh`
+  - `/Users/bob/code/homeassistant/ha_ai_analyzer/ops/proxmox/deploy.sh`
+  - `/Users/bob/code/homeassistant/ha_ai_analyzer/ops/proxmox/rollback.sh`
+  - `/Users/bob/code/homeassistant/ha_ai_analyzer/ops/proxmox/backup-db.sh`
+- CI image publish workflow: `/Users/bob/code/homeassistant/ha_ai_analyzer/.github/workflows/publish-image.yml`
+
+See `/Users/bob/code/homeassistant/ha_ai_analyzer/docs/deploy-proxmox.md` for full setup, update, rollback, and backup instructions.
