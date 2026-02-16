@@ -47,12 +47,16 @@ Run from repo root:
 - Start local Home Assistant only: `yarn dev:ha:up`
 - Tail local Home Assistant logs: `yarn dev:ha:logs`
 - Emit local Home Assistant demo events: `yarn dev:ha:emit-demo`
-- Start local operator UI service: `yarn dev:ui:up`
+- Start local operator UI service (rebuild + force recreate): `yarn dev:ui:up`
 - Tail local operator UI logs: `yarn dev:ui:logs`
 - Verify all checks: `yarn verify`
 - Lint: `yarn lint`
 - Format: `yarn format`
 - Type check: `yarn lint:type`
+- Upgrade root direct dependencies to latest: `yarn up "*@latest"`
+- Upgrade collector direct dependencies to latest: `yarn workspace @ha-ai/collector up "*@latest"`
+- Upgrade tools direct dependencies to latest: `yarn workspace @ha-ai/tools up "*@latest"`
+- Upgrade UI direct dependencies to latest: `yarn workspace @ha-ai/ui up "*@latest"`
 - Run collector: `yarn start:collector`
 - Run UI server: `yarn start:ui`
 - Run analytics: `yarn start:analytics`
