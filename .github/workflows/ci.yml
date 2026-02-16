@@ -16,9 +16,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Verify Docker image build
-        run: docker build -f collector/Dockerfile . --tag ha-ai-analyzer:ci-${{ github.sha }}
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:

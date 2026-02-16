@@ -114,9 +114,8 @@ yarn start:analysis:scheduler
 
 - CI workflow: `.github/workflows/ci.yml`
   - `verify` job runs `yarn verify`
-  - `verify` job also validates `collector/Dockerfile` by building the image
   - `integration-tests` runs DB-backed suites with Postgres 18
-  - `publish-pr-image` publishes PR test images to GHCR with tags `pr-<number>-sha-<sha>` (same-repo PRs only)
+  - `publish-pr-image` builds and publishes PR test images to GHCR with tags `pr-<number>-sha-<sha>` (same-repo PRs only)
 - Dependabot config: `.github/dependabot.yml`
 - Dependabot auto-merge workflow: `.github/workflows/dependabot-automerge.yml`
 

@@ -126,9 +126,9 @@ Proxmox operations (run on VM):
 ## CI Expectations
 
 - GitHub Actions workflow is defined in `.github/workflows/ci.yml`.
-- `verify` job must run `yarn verify` and verify `collector/Dockerfile` image builds on push to `main` and pull requests.
+- `verify` job must run `yarn verify` on push to `main` and pull requests.
 - `integration-tests` job must run `yarn test` with `TEST_DATABASE_URL` against Postgres 18 so DB-backed suites execute in CI.
-- `publish-pr-image` job in `.github/workflows/ci.yml` should publish GHCR tags `pr-<number>-sha-<sha>` for same-repo pull requests after integration tests pass.
+- `publish-pr-image` job in `.github/workflows/ci.yml` should build and publish GHCR tags `pr-<number>-sha-<sha>` for same-repo pull requests after integration tests pass.
 - CI jobs must enable Corepack and run `corepack install` so the package manager/version comes from the repo `packageManager` field.
 - Image publish workflow is defined in `.github/workflows/publish-image.yml` and should publish GHCR tags `sha-<commit>` and `main-latest` only after CI succeeds on `main`.
 
