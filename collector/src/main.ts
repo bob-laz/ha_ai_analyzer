@@ -8,6 +8,17 @@ const main = async (): Promise<void> => {
     throw new Error('HA_TOKEN is required');
   }
 
+  const allowlist = [...config.domainAllowlist].sort();
+  const excludelist = [...config.domainExcludelist].sort();
+  console.info('collector filter configuration', {
+    eventTypes: config.eventTypes,
+    domainAllowlist: allowlist,
+    domainExcludelist: excludelist,
+  });
+  if (allowlist.length === 0) {
+    console.warn('collector allowlist is empty; all domains will be collected unless excluded');
+  }
+
   const pool = createPool(config.databaseUrl);
   const writer = new BatchedEventWriter(
     pool,
