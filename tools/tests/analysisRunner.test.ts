@@ -114,6 +114,119 @@ describe('runAnalysis', () => {
         callOrder.push('listTopContextIds');
         return ['ctx-child'];
       }),
+      getLatestEnvironmentInventory: vi.fn(async () => {
+        callOrder.push('getLatestEnvironmentInventory');
+        return {
+          capturedAt: '2026-01-02T00:59:00.000Z',
+          countsByType: {
+            device: 2,
+            service: 2,
+            integration: 1,
+            addon: 1,
+          },
+          truncatedByType: {
+            device: 0,
+            service: 0,
+            integration: 0,
+            addon: 0,
+          },
+          itemsByType: {
+            device: [
+              { resourceId: 'device-1', label: 'Kitchen Sensor', metadata: { manufacturer: 'Acme', model: 'S1' } },
+              { resourceId: 'device-2', label: 'Bedroom Motion', metadata: { manufacturer: 'Acme', model: 'M2' } },
+            ],
+            service: [
+              {
+                resourceId: 'light.turn_on',
+                label: 'Turn on',
+                metadata: { definition: { fields: { entity_id: {}, brightness_pct: {} }, target: { entity: {} } } },
+              },
+              {
+                resourceId: 'light.turn_off',
+                label: 'Turn off',
+                metadata: { definition: { fields: { entity_id: {} }, target: { entity: {} } } },
+              },
+            ],
+            integration: [
+              {
+                resourceId: 'entry-1',
+                label: 'Mobile App',
+                metadata: { domain: 'mobile_app', source: 'user', state: 'loaded', raw: { supports_unload: true } },
+              },
+            ],
+            addon: [
+              {
+                resourceId: 'mosquitto',
+                label: 'Mosquitto broker',
+                metadata: { version: '6.4.0', installed: true, state: 'started' },
+              },
+            ],
+          },
+        };
+      }),
+      getLatestResourceUsageSnapshot: vi.fn(async () => {
+        callOrder.push('getLatestResourceUsageSnapshot');
+        return {
+          capturedAt: '2026-01-02T00:59:00.000Z',
+          countsByType: {
+            energy: 2,
+            water: 1,
+            gas: 1,
+            power: 1,
+          },
+          truncatedByType: {
+            energy: 0,
+            water: 0,
+            gas: 0,
+            power: 0,
+          },
+          itemsByType: {
+            energy: [
+              {
+                entityId: 'sensor.daily_energy',
+                readingNumeric: 12.5,
+                readingText: '12.5',
+                unit: 'kWh',
+                metadata: { friendlyName: 'Daily Energy', stateClass: 'total_increasing' },
+              },
+              {
+                entityId: 'sensor.monthly_energy',
+                readingNumeric: 220.1,
+                readingText: '220.1',
+                unit: 'kWh',
+                metadata: { friendlyName: 'Monthly Energy', stateClass: 'total_increasing' },
+              },
+            ],
+            water: [
+              {
+                entityId: 'sensor.water_meter_total',
+                readingNumeric: 4.2,
+                readingText: '4.2',
+                unit: 'm3',
+                metadata: { friendlyName: 'Water Meter Total', stateClass: 'total_increasing' },
+              },
+            ],
+            gas: [
+              {
+                entityId: 'sensor.gas_meter_total',
+                readingNumeric: 3.1,
+                readingText: '3.1',
+                unit: 'm3',
+                metadata: { friendlyName: 'Gas Meter Total', stateClass: 'total_increasing' },
+              },
+            ],
+            power: [
+              {
+                entityId: 'sensor.home_power_now',
+                readingNumeric: 820,
+                readingText: '820',
+                unit: 'W',
+                metadata: { friendlyName: 'Home Power', stateClass: 'measurement' },
+              },
+            ],
+          },
+        };
+      }),
       insertInsights: vi.fn(async () => {
         callOrder.push('insertInsights');
         return [{ id: 11, rank: 1 }];
@@ -166,6 +279,8 @@ describe('runAnalysis', () => {
         maxTraceContexts: 10,
         maxEventsPerContext: 60,
         traceMaxDepth: 6,
+        maxEnvironmentItemsPerType: 50,
+        maxResourceUsageItemsPerType: 20,
       },
       {
         repo,
@@ -179,6 +294,8 @@ describe('runAnalysis', () => {
     expect(callOrder).toEqual([
       'createAgentRun',
       'listTopContextIds',
+      'getLatestEnvironmentInventory',
+      'getLatestResourceUsageSnapshot',
       'insertInsights',
       'insertEvidence',
       'insertRecommendations',
@@ -193,6 +310,8 @@ describe('runAnalysis', () => {
       completeAgentRun: vi.fn(async () => {}),
       failAgentRun: vi.fn(async () => {}),
       listTopContextIds: vi.fn(async () => ['ctx-child']),
+      getLatestEnvironmentInventory: vi.fn(async () => null),
+      getLatestResourceUsageSnapshot: vi.fn(async () => null),
       insertInsights: vi.fn(async () => []),
       insertEvidence: vi.fn(async () => {}),
       insertRecommendations: vi.fn(async () => {}),
@@ -217,6 +336,8 @@ describe('runAnalysis', () => {
           maxTraceContexts: 10,
           maxEventsPerContext: 60,
           traceMaxDepth: 6,
+          maxEnvironmentItemsPerType: 50,
+          maxResourceUsageItemsPerType: 20,
         },
         {
           repo,

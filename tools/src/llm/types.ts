@@ -21,6 +21,38 @@ export type TraceBundle = {
   trace: TraceContextResult;
 };
 
+export type HomeAssistantInventoryType = 'device' | 'service' | 'integration' | 'addon';
+
+export type HomeAssistantInventoryItem = {
+  resourceId: string;
+  label: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type HomeAssistantInventory = {
+  capturedAt: string;
+  countsByType: Record<HomeAssistantInventoryType, number>;
+  truncatedByType: Record<HomeAssistantInventoryType, number>;
+  itemsByType: Record<HomeAssistantInventoryType, HomeAssistantInventoryItem[]>;
+};
+
+export type ResourceUsageType = 'energy' | 'water' | 'gas' | 'power';
+
+export type ResourceUsageReading = {
+  entityId: string;
+  readingNumeric: number | null;
+  readingText: string;
+  unit: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type ResourceUsageSnapshot = {
+  capturedAt: string;
+  countsByType: Record<ResourceUsageType, number>;
+  truncatedByType: Record<ResourceUsageType, number>;
+  itemsByType: Record<ResourceUsageType, ResourceUsageReading[]>;
+};
+
 export type AnalysisPromptInput = {
   runId: string;
   generatedAt: string;
@@ -29,6 +61,8 @@ export type AnalysisPromptInput = {
   topChanges: TopChangesResult;
   tracedContexts: TraceBundle[];
   evidenceCatalog: EvidenceCatalogItem[];
+  homeAssistantInventory: HomeAssistantInventory | null;
+  resourceUsageSnapshot: ResourceUsageSnapshot | null;
   constraints: {
     maxInsights: number;
     recommendationPolicy: 'propose_only';

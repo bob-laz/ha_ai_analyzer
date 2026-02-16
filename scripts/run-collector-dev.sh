@@ -18,6 +18,8 @@ WITH_DEMO_EVENTS=0
 DEV_HA_AUTO_BOOTSTRAP="${DEV_HA_AUTO_BOOTSTRAP:-true}"
 DEV_HA_TOKEN_FILE="${DEV_HA_TOKEN_FILE:-.dev-ha.token}"
 RETENTION_AUTOSTART="${RETENTION_AUTOSTART:-true}"
+AUTOMATION_SNAPSHOT_AUTOSTART="${AUTOMATION_SNAPSHOT_AUTOSTART:-true}"
+DAILY_SUMMARY_AUTOSTART="${DAILY_SUMMARY_AUTOSTART:-true}"
 TOKEN_SOURCE="unset"
 
 if [[ -n "${HA_TOKEN:-}" ]]; then
@@ -229,11 +231,25 @@ echo "Collector HA websocket target: $HA_WS_URL"
 
 DEMO_PID=""
 RETENTION_PID=""
+AUTOMATION_SNAPSHOT_PID=""
+DAILY_SUMMARY_PID=""
 
 if is_truthy "$RETENTION_AUTOSTART"; then
   echo "Starting retention scheduler alongside collector..."
   yarn workspace @ha-ai/tools start:retention --schedule &
   RETENTION_PID="$!"
+fi
+
+if is_truthy "$AUTOMATION_SNAPSHOT_AUTOSTART"; then
+  echo "Starting automation snapshot scheduler alongside collector..."
+  yarn workspace @ha-ai/tools start:automation-snapshots --schedule &
+  AUTOMATION_SNAPSHOT_PID="$!"
+fi
+
+if is_truthy "$DAILY_SUMMARY_AUTOSTART"; then
+  echo "Starting daily home summary scheduler alongside collector..."
+  yarn workspace @ha-ai/tools start:daily-home-summary --schedule &
+  DAILY_SUMMARY_PID="$!"
 fi
 
 if [[ "$WITH_DEMO_EVENTS" -eq 1 ]]; then
@@ -247,8 +263,14 @@ if [[ "$WITH_DEMO_EVENTS" -eq 1 ]]; then
 fi
 
 cleanup() {
+  if [[ -n "$AUTOMATION_SNAPSHOT_PID" ]]; then
+    kill "$AUTOMATION_SNAPSHOT_PID" >/dev/null 2>&1 || true
+  fi
   if [[ -n "$RETENTION_PID" ]]; then
     kill "$RETENTION_PID" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$DAILY_SUMMARY_PID" ]]; then
+    kill "$DAILY_SUMMARY_PID" >/dev/null 2>&1 || true
   fi
   if [[ -n "$DEMO_PID" ]]; then
     kill "$DEMO_PID" >/dev/null 2>&1 || true

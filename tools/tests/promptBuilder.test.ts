@@ -62,6 +62,80 @@ describe('buildAnalysisPrompt', () => {
           payload: { delta: 3 },
         },
       ],
+      homeAssistantInventory: {
+        capturedAt: '2026-01-02T00:59:00.000Z',
+        countsByType: {
+          device: 2,
+          service: 3,
+          integration: 1,
+          addon: 1,
+        },
+        truncatedByType: {
+          device: 0,
+          service: 0,
+          integration: 0,
+          addon: 0,
+        },
+        itemsByType: {
+          device: [{ resourceId: 'device-1', label: 'Kitchen Sensor', metadata: { manufacturer: 'Acme' } }],
+          service: [{ resourceId: 'light.turn_on', label: 'Turn on', metadata: { domain: 'light' } }],
+          integration: [{ resourceId: 'entry-1', label: 'Mobile App', metadata: { domain: 'mobile_app' } }],
+          addon: [{ resourceId: 'mosquitto', label: 'Mosquitto', metadata: { installed: true } }],
+        },
+      },
+      resourceUsageSnapshot: {
+        capturedAt: '2026-01-02T00:58:00.000Z',
+        countsByType: {
+          energy: 2,
+          water: 1,
+          gas: 1,
+          power: 1,
+        },
+        truncatedByType: {
+          energy: 0,
+          water: 0,
+          gas: 0,
+          power: 0,
+        },
+        itemsByType: {
+          energy: [
+            {
+              entityId: 'sensor.daily_energy',
+              readingNumeric: 12.5,
+              readingText: '12.5',
+              unit: 'kWh',
+              metadata: { friendlyName: 'Daily Energy' },
+            },
+          ],
+          water: [
+            {
+              entityId: 'sensor.water_meter_total',
+              readingNumeric: 4.2,
+              readingText: '4.2',
+              unit: 'm3',
+              metadata: { friendlyName: 'Water Meter Total' },
+            },
+          ],
+          gas: [
+            {
+              entityId: 'sensor.gas_meter_total',
+              readingNumeric: 3.1,
+              readingText: '3.1',
+              unit: 'm3',
+              metadata: { friendlyName: 'Gas Meter Total' },
+            },
+          ],
+          power: [
+            {
+              entityId: 'sensor.home_power_now',
+              readingNumeric: 820,
+              readingText: '820',
+              unit: 'W',
+              metadata: { friendlyName: 'Home Power' },
+            },
+          ],
+        },
+      },
       constraints: {
         maxInsights: 5,
         recommendationPolicy: 'propose_only',
@@ -82,6 +156,22 @@ describe('buildAnalysisPrompt', () => {
         max_insights: 5,
         recommendation_policy: 'propose_only',
         output_must_match_schema: true,
+      },
+      home_assistant_inventory: {
+        counts_by_type: {
+          device: 2,
+          service: 3,
+          integration: 1,
+          addon: 1,
+        },
+      },
+      resource_usage_snapshot: {
+        counts_by_type: {
+          energy: 2,
+          water: 1,
+          gas: 1,
+          power: 1,
+        },
       },
     });
     expect((parsed.output_schema as { required?: string[] }).required).toEqual([

@@ -39,6 +39,8 @@ const input: AnalysisPromptInput = {
       payload: {},
     },
   ],
+  homeAssistantInventory: null,
+  resourceUsageSnapshot: null,
   constraints: {
     maxInsights: 5,
     recommendationPolicy: 'propose_only',

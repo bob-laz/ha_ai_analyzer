@@ -147,6 +147,43 @@ CREATE TABLE IF NOT EXISTS automation_snapshots (
 CREATE INDEX IF NOT EXISTS idx_automation_snapshots_auto_time
     ON automation_snapshots (automation_id, captured_at DESC);
 
+CREATE TABLE IF NOT EXISTS ha_environment_snapshots (
+    id BIGSERIAL PRIMARY KEY,
+    snapshot_type TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    label TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    captured_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ha_environment_snapshots_type_resource_time
+    ON ha_environment_snapshots (snapshot_type, resource_id, captured_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ha_environment_snapshots_captured_time
+    ON ha_environment_snapshots (captured_at DESC);
+
+CREATE TABLE IF NOT EXISTS ha_usage_snapshots (
+    id BIGSERIAL PRIMARY KEY,
+    entity_id TEXT NOT NULL,
+    usage_type TEXT NOT NULL,
+    reading_numeric DOUBLE PRECISION,
+    reading_text TEXT NOT NULL,
+    unit TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    captured_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ha_usage_snapshots_entity_time
+    ON ha_usage_snapshots (entity_id, captured_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ha_usage_snapshots_type_time
+    ON ha_usage_snapshots (usage_type, captured_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ha_usage_snapshots_captured_time
+    ON ha_usage_snapshots (captured_at DESC);
+
 CREATE TABLE IF NOT EXISTS trace_contexts (
     id BIGSERIAL PRIMARY KEY,
     context_id TEXT NOT NULL UNIQUE,

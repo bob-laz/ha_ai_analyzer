@@ -20,6 +20,24 @@ export const buildAnalysisPrompt = (input: AnalysisPromptInput): BuiltPrompt => 
     rootContextId: bundle.trace.rootContextId,
     events: bundle.trace.events,
   }));
+  const inventoryItemsByType = (() => {
+    if (!input.homeAssistantInventory) {
+      return null;
+    }
+    const extended = input.homeAssistantInventory as AnalysisPromptInput['homeAssistantInventory'] & {
+      compactItemsByType?: Record<string, unknown>;
+    };
+    return extended.compactItemsByType ?? input.homeAssistantInventory.itemsByType;
+  })();
+  const usageItemsByType = (() => {
+    if (!input.resourceUsageSnapshot) {
+      return null;
+    }
+    const extended = input.resourceUsageSnapshot as AnalysisPromptInput['resourceUsageSnapshot'] & {
+      compactItemsByType?: Record<string, unknown>;
+    };
+    return extended.compactItemsByType ?? input.resourceUsageSnapshot.itemsByType;
+  })();
 
   const userPayload = {
     objective:
@@ -38,6 +56,22 @@ export const buildAnalysisPrompt = (input: AnalysisPromptInput): BuiltPrompt => 
       daily_summary: input.dailySummary,
       top_changes: input.topChanges,
     },
+    home_assistant_inventory: input.homeAssistantInventory
+      ? {
+          captured_at: input.homeAssistantInventory.capturedAt,
+          counts_by_type: input.homeAssistantInventory.countsByType,
+          truncated_by_type: input.homeAssistantInventory.truncatedByType,
+          items_by_type: inventoryItemsByType,
+        }
+      : null,
+    resource_usage_snapshot: input.resourceUsageSnapshot
+      ? {
+          captured_at: input.resourceUsageSnapshot.capturedAt,
+          counts_by_type: input.resourceUsageSnapshot.countsByType,
+          truncated_by_type: input.resourceUsageSnapshot.truncatedByType,
+          items_by_type: usageItemsByType,
+        }
+      : null,
     traced_contexts: compactTraces,
     evidence_catalog: input.evidenceCatalog,
     output_schema: agentOutputSchema,

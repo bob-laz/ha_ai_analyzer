@@ -55,6 +55,276 @@
     }
   ],
   "summary": "Focused analysis summary",
+  "homeAssistantInventory": {
+    "capturedAt": "2026-01-02T00:59:00.000Z",
+    "countsByType": {
+      "device": 2,
+      "service": 2,
+      "integration": 1,
+      "addon": 1
+    },
+    "truncatedByType": {
+      "device": 0,
+      "service": 0,
+      "integration": 0,
+      "addon": 0
+    },
+    "itemsByType": {
+      "device": [
+        {
+          "resourceId": "device-1",
+          "label": "Kitchen Sensor",
+          "metadata": {
+            "manufacturer": "Acme",
+            "model": "S1"
+          }
+        },
+        {
+          "resourceId": "device-2",
+          "label": "Bedroom Motion",
+          "metadata": {
+            "manufacturer": "Acme",
+            "model": "M2"
+          }
+        }
+      ],
+      "service": [
+        {
+          "resourceId": "light.turn_on",
+          "label": "Turn on",
+          "metadata": {
+            "definition": {
+              "fields": {
+                "entity_id": {},
+                "brightness_pct": {}
+              },
+              "target": {
+                "entity": {}
+              }
+            }
+          }
+        },
+        {
+          "resourceId": "light.turn_off",
+          "label": "Turn off",
+          "metadata": {
+            "definition": {
+              "fields": {
+                "entity_id": {}
+              },
+              "target": {
+                "entity": {}
+              }
+            }
+          }
+        }
+      ],
+      "integration": [
+        {
+          "resourceId": "entry-1",
+          "label": "Mobile App",
+          "metadata": {
+            "domain": "mobile_app",
+            "source": "user",
+            "state": "loaded",
+            "raw": {
+              "supports_unload": true
+            }
+          }
+        }
+      ],
+      "addon": [
+        {
+          "resourceId": "mosquitto",
+          "label": "Mosquitto broker",
+          "metadata": {
+            "version": "6.4.0",
+            "installed": true,
+            "state": "started"
+          }
+        }
+      ]
+    },
+    "compactItemsByType": {
+      "device": [
+        {
+          "id": "device-1",
+          "label": "Kitchen Sensor",
+          "manufacturer": "Acme",
+          "model": "S1",
+          "areaId": null,
+          "disabledBy": null
+        },
+        {
+          "id": "device-2",
+          "label": "Bedroom Motion",
+          "manufacturer": "Acme",
+          "model": "M2",
+          "areaId": null,
+          "disabledBy": null
+        }
+      ],
+      "service": [
+        {
+          "id": "light.turn_on",
+          "label": "Turn on",
+          "domain": "light",
+          "service": "turn_on",
+          "fieldNames": ["entity_id", "brightness_pct"],
+          "hasTargetSelector": true
+        },
+        {
+          "id": "light.turn_off",
+          "label": "Turn off",
+          "domain": "light",
+          "service": "turn_off",
+          "fieldNames": ["entity_id"],
+          "hasTargetSelector": true
+        }
+      ],
+      "integration": [
+        {
+          "id": "entry-1",
+          "label": "Mobile App",
+          "domain": "mobile_app",
+          "state": "loaded",
+          "source": "user",
+          "disabledBy": null,
+          "supportsUnload": true
+        }
+      ],
+      "addon": [
+        {
+          "id": "mosquitto",
+          "label": "Mosquitto broker",
+          "version": "6.4.0",
+          "installed": true,
+          "state": "started",
+          "updateAvailable": null
+        }
+      ]
+    }
+  },
+  "resourceUsageSnapshot": {
+    "capturedAt": "2026-01-02T00:59:00.000Z",
+    "countsByType": {
+      "energy": 2,
+      "water": 1,
+      "gas": 1,
+      "power": 1
+    },
+    "truncatedByType": {
+      "energy": 0,
+      "water": 0,
+      "gas": 0,
+      "power": 0
+    },
+    "itemsByType": {
+      "energy": [
+        {
+          "entityId": "sensor.daily_energy",
+          "readingNumeric": 12.5,
+          "readingText": "12.5",
+          "unit": "kWh",
+          "metadata": {
+            "friendlyName": "Daily Energy",
+            "stateClass": "total_increasing"
+          }
+        },
+        {
+          "entityId": "sensor.monthly_energy",
+          "readingNumeric": 220.1,
+          "readingText": "220.1",
+          "unit": "kWh",
+          "metadata": {
+            "friendlyName": "Monthly Energy",
+            "stateClass": "total_increasing"
+          }
+        }
+      ],
+      "water": [
+        {
+          "entityId": "sensor.water_meter_total",
+          "readingNumeric": 4.2,
+          "readingText": "4.2",
+          "unit": "m3",
+          "metadata": {
+            "friendlyName": "Water Meter Total",
+            "stateClass": "total_increasing"
+          }
+        }
+      ],
+      "gas": [
+        {
+          "entityId": "sensor.gas_meter_total",
+          "readingNumeric": 3.1,
+          "readingText": "3.1",
+          "unit": "m3",
+          "metadata": {
+            "friendlyName": "Gas Meter Total",
+            "stateClass": "total_increasing"
+          }
+        }
+      ],
+      "power": [
+        {
+          "entityId": "sensor.home_power_now",
+          "readingNumeric": 820,
+          "readingText": "820",
+          "unit": "W",
+          "metadata": {
+            "friendlyName": "Home Power",
+            "stateClass": "measurement"
+          }
+        }
+      ]
+    },
+    "compactItemsByType": {
+      "energy": [
+        {
+          "entityId": "sensor.daily_energy",
+          "reading": 12.5,
+          "unit": "kWh",
+          "friendlyName": "Daily Energy",
+          "stateClass": "total_increasing"
+        },
+        {
+          "entityId": "sensor.monthly_energy",
+          "reading": 220.1,
+          "unit": "kWh",
+          "friendlyName": "Monthly Energy",
+          "stateClass": "total_increasing"
+        }
+      ],
+      "water": [
+        {
+          "entityId": "sensor.water_meter_total",
+          "reading": 4.2,
+          "unit": "m3",
+          "friendlyName": "Water Meter Total",
+          "stateClass": "total_increasing"
+        }
+      ],
+      "gas": [
+        {
+          "entityId": "sensor.gas_meter_total",
+          "reading": 3.1,
+          "unit": "m3",
+          "friendlyName": "Gas Meter Total",
+          "stateClass": "total_increasing"
+        }
+      ],
+      "power": [
+        {
+          "entityId": "sensor.home_power_now",
+          "reading": 820,
+          "unit": "W",
+          "friendlyName": "Home Power",
+          "stateClass": "measurement"
+        }
+      ]
+    }
+  },
   "truncation": {
     "maxEventsPerContext": 60,
     "truncatedContexts": [],

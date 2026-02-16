@@ -49,6 +49,10 @@ Run from repo root:
 - Type check: `yarn lint:type`
 - Run collector: `yarn start:collector`
 - Run analytics: `yarn start:analytics`
+- Run automation snapshot sync once: `yarn start:automation-snapshots:once`
+- Run automation snapshot scheduler: `yarn start:automation-snapshots:scheduler`
+- Run daily home summary once: `yarn start:daily-home-summary:once`
+- Run daily home summary scheduler: `yarn start:daily-home-summary:scheduler`
 - Run retention once: `yarn start:retention --once`
 - Run analysis once: `yarn start:analysis:once`
 - Run analysis scheduler: `yarn start:analysis:scheduler`
@@ -93,6 +97,10 @@ Proxmox operations (run on VM):
 - `publishReport` should persist to `analysis_results` when a DB client is provided.
 - LLM analysis runner should remain provider-agnostic (`LLMProvider` interface) with OpenAI as current concrete provider.
 - LLM recommendations are propose-only; never auto-apply automation changes.
+- LLM analysis input should include latest Home Assistant environment snapshot context (devices/services/integrations/addons) from `ha_environment_snapshots` when available.
+- LLM and daily-summary agents should include latest utility usage snapshot context (`energy`/`water`/`gas`/`power`) from `ha_usage_snapshots` when available.
+- Analytics runtime should publish a readable Home Assistant `persistent_notification` after successful analysis runs when `LLM_HA_NOTIFICATION_ENABLED=true`.
+- Daily home summary agent should compare the target day against prior baseline days, flag metric anomalies, persist report output, and publish Home Assistant notification when enabled.
 - Collector numeric env parsing should apply documented fallbacks when values are unset or blank.
 - Prefer latest stable package versions when adding or updating dependencies.
 - When asked to upgrade dependencies, upgrade to the latest available versions unless the user explicitly asks for pinned/older versions.
@@ -116,6 +124,12 @@ Proxmox operations (run on VM):
 - `dev:collector --mode=...` should load repo-root `.env` automatically so local secrets/config are honored without manual exports.
 - `dev:db:up` should be the standalone path for starting postgres + pgadmin and should self-heal stale pgadmin network references.
 - `dev:collector --mode=...` should auto-start the retention scheduler by default (disable with `RETENTION_AUTOSTART=false`).
+- `dev:collector --mode=...` should auto-start automation snapshot scheduler by default (disable with `AUTOMATION_SNAPSHOT_AUTOSTART=false`).
+- `dev:collector --mode=...` should auto-start daily home summary scheduler by default (disable with `DAILY_SUMMARY_AUTOSTART=false`).
+- Automation snapshot sync should run once immediately on scheduler startup, then on schedule.
+- Automation snapshot sync should capture `automation`, `script`, `scene`, and blueprint context rows in `automation_snapshots` (blueprints included when discoverable from entity config and/or HA blueprint listing endpoints).
+- Automation snapshot sync should also capture Home Assistant environment inventory rows (`device`, `service`, `integration`, `addon`) in `ha_environment_snapshots`.
+- Automation snapshot sync should capture utility/resource usage sensor readings into `ha_usage_snapshots`.
 - `dev:down` should include `debug`, `dev-ha`, and `analytics` profiles to prevent stale in-use compose network errors during teardown.
 - `pgadmin/servers.json` should register `ha_ai_postgres` for local dev, and compose should keep server import enabled on startup.
 - pgAdmin default login and master-password behavior should be configurable via `.env` (`PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`, `PGADMIN_MASTER_PASSWORD_REQUIRED`).

@@ -63,7 +63,7 @@ services:
       [
         "/bin/sh",
         "-lc",
-        "yarn workspace @ha-ai/tools start:retention --schedule & yarn workspace @ha-ai/collector start:collector",
+        "yarn workspace @ha-ai/tools start:retention --schedule & yarn workspace @ha-ai/tools start:automation-snapshots --schedule & yarn workspace @ha-ai/tools start:daily-home-summary --schedule & yarn workspace @ha-ai/collector start:collector",
       ]
     working_dir: /app
     volumes:

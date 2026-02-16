@@ -1,6 +1,13 @@
 import { describe, expect, test, vi } from 'vitest';
 
-import { ANALYSIS_RUN_LOCK_KEY, computeNextScheduledRunAt, withAnalysisRunLock } from '../src/analyticsJob.js';
+import {
+  ANALYSIS_RUN_LOCK_KEY,
+  buildHomeAssistantNotificationMessage,
+  computeNextScheduledRunAt,
+  deriveHaHttpUrlFromWsUrl,
+  publishHomeAssistantNotification,
+  withAnalysisRunLock,
+} from '../src/analyticsJob.js';
 
 describe('computeNextScheduledRunAt', () => {
   test('returns same-day schedule when current time is before target', () => {
@@ -58,5 +65,85 @@ describe('withAnalysisRunLock', () => {
     expect(run).toHaveBeenCalledTimes(1);
     expect(pool.query).toHaveBeenNthCalledWith(1, 'SELECT pg_try_advisory_lock($1) AS locked', [ANALYSIS_RUN_LOCK_KEY]);
     expect(pool.query).toHaveBeenNthCalledWith(2, 'SELECT pg_advisory_unlock($1)', [ANALYSIS_RUN_LOCK_KEY]);
+  });
+});
+
+describe('deriveHaHttpUrlFromWsUrl', () => {
+  test('derives HTTP base URL from websocket URL', () => {
+    expect(deriveHaHttpUrlFromWsUrl('ws://192.168.1.50:8123/api/websocket')).toBe('http://192.168.1.50:8123');
+    expect(deriveHaHttpUrlFromWsUrl('wss://ha.example.com/api/websocket')).toBe('https://ha.example.com');
+    expect(deriveHaHttpUrlFromWsUrl(undefined)).toBeNull();
+    expect(deriveHaHttpUrlFromWsUrl('not-a-url')).toBeNull();
+  });
+});
+
+describe('HA notification helpers', () => {
+  test('buildHomeAssistantNotificationMessage emits readable report summary', () => {
+    const message = buildHomeAssistantNotificationMessage(
+      {
+        agentRunId: 7,
+        runUuid: 'run-123',
+        markdown: '# markdown',
+        analysisResultId: 42,
+        reportPayload: {
+          summary: 'Lighting automations are firing too frequently at night.',
+          window: {
+            start: '2026-01-01T01:00:00.000Z',
+            end: '2026-01-02T01:00:00.000Z',
+            timezone: 'UTC',
+          },
+          rankedInsights: [
+            { rank: 1, title: 'Night motion spam', confidence: 0.91 },
+            { rank: 2, title: 'Repeated turn_on bursts', confidence: 0.82 },
+          ],
+          proposedAutomationChanges: [
+            {
+              automationId: 'automation.night_motion',
+              changeType: 'adjust_trigger',
+              reasoning: 'Increase debounce to reduce duplicate firings.',
+            },
+          ],
+        },
+      },
+      6_000,
+    );
+
+    expect(message).toContain('# Home Assistant AI Analysis');
+    expect(message).toContain('Night motion spam');
+    expect(message).toContain('automation.night_motion: adjust_trigger');
+  });
+
+  test('publishHomeAssistantNotification posts persistent notification payload', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response('[]', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const published = await publishHomeAssistantNotification(
+      {
+        agentRunId: 7,
+        runUuid: 'run-123',
+        markdown: '# markdown',
+        analysisResultId: 42,
+        reportPayload: {
+          summary: 'Summary',
+          rankedInsights: [],
+          proposedAutomationChanges: [],
+        },
+      },
+      {
+        enabled: true,
+        haHttpUrl: 'http://127.0.0.1:8123',
+        haToken: 'token',
+        title: 'Home Assistant AI Analysis',
+        notificationId: 'ha_ai_llm_analysis_latest',
+        maxMessageChars: 4_000,
+        requestTimeoutMs: 5_000,
+      },
+    );
+
+    expect(published).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('http://127.0.0.1:8123/api/services/persistent_notification/create');
+    expect((init as RequestInit).method).toBe('POST');
   });
 });

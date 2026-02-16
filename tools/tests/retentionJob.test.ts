@@ -54,6 +54,8 @@ describe('runRetentionPass', () => {
       traceContextsRetentionDays: 30,
       entitySnapshotsRetentionDays: 30,
       automationSnapshotsRetentionDays: 60,
+      haEnvironmentSnapshotsRetentionDays: 60,
+      haUsageSnapshotsRetentionDays: 180,
       agentRunsRetentionDays: 180,
       orphanAnalysisResultsRetentionDays: 180,
       batchSize: 2,
@@ -68,6 +70,8 @@ describe('runRetentionPass', () => {
     expect(stats.rowsDeleted.traceContexts).toBe(3);
     expect(stats.rowsDeleted.entitySnapshots).toBe(0);
     expect(stats.rowsDeleted.automationSnapshots).toBe(0);
+    expect(stats.rowsDeleted.haEnvironmentSnapshots).toBe(0);
+    expect(stats.rowsDeleted.haUsageSnapshots).toBe(0);
     expect(stats.rowsDeleted.agentRuns).toBe(0);
     expect(stats.rowsDeleted.orphanAnalysisResults).toBe(0);
   });
@@ -109,6 +113,8 @@ describe('runRetentionPass', () => {
       traceContextsRetentionDays: 30,
       entitySnapshotsRetentionDays: 30,
       automationSnapshotsRetentionDays: 60,
+      haEnvironmentSnapshotsRetentionDays: 60,
+      haUsageSnapshotsRetentionDays: 180,
       agentRunsRetentionDays: 180,
       orphanAnalysisResultsRetentionDays: 180,
       batchSize: 2,

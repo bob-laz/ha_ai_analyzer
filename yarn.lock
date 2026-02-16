@@ -300,10 +300,12 @@ __metadata:
   dependencies:
     "@types/node": "npm:^25.2.3"
     "@types/pg": "npm:^8.16.0"
+    "@types/ws": "npm:^8.18.1"
     pg: "npm:^8.18.0"
     tsx: "npm:^4.21.0"
     typescript: "npm:^5.9.3"
     vitest: "npm:^4.0.18"
+    ws: "npm:^8.18.3"
   languageName: unknown
   linkType: soft
 
@@ -1827,7 +1829,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ws@npm:^8.19.0":
+"ws@npm:^8.18.3, ws@npm:^8.19.0":
   version: 8.19.0
   resolution: "ws@npm:8.19.0"
   peerDependencies:

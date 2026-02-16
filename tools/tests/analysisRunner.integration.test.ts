@@ -178,6 +178,8 @@ describe.skipIf(!shouldRun)('analysis runner integrations', () => {
         maxTraceContexts: 10,
         maxEventsPerContext: 60,
         traceMaxDepth: 6,
+        maxEnvironmentItemsPerType: 50,
+        maxResourceUsageItemsPerType: 20,
       },
       {
         now: () => new Date('2026-01-02T01:00:00.000Z'),
@@ -238,6 +240,8 @@ describe.skipIf(!shouldRun)('analysis runner integrations', () => {
           maxTraceContexts: 10,
           maxEventsPerContext: 60,
           traceMaxDepth: 6,
+          maxEnvironmentItemsPerType: 50,
+          maxResourceUsageItemsPerType: 20,
         },
         {
           now: () => new Date('2026-01-02T01:00:00.000Z'),
