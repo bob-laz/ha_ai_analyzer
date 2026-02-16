@@ -19,7 +19,7 @@
     "dev:ha:up": "docker compose --profile dev-ha up -d homeassistant",
     "dev:ha:logs": "docker compose logs -f homeassistant",
     "dev:ha:emit-demo": "bash scripts/emit-ha-demo-events.sh",
-    "dev:ui:up": "docker compose --profile ui up -d ui",
+    "dev:ui:up": "docker compose --profile ui up -d --build --force-recreate ui",
     "dev:ui:logs": "docker compose logs -f ui",
     "verify": "yarn build && yarn lint && yarn test",
     "lint": "biome check .",

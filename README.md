@@ -155,6 +155,8 @@ yarn dev:ui:up
 # then open http://127.0.0.1:5080
 ```
 
+`yarn dev:ui:up` rebuilds and force-recreates the UI container so fresh web assets (for example favicon updates) are served immediately.
+
 ## Root Commands
 
 From `/Users/bob/code/homeassistant/ha_ai_analyzer`:
@@ -166,6 +168,10 @@ yarn verify
 yarn lint
 yarn format
 yarn lint:type
+yarn up "*@latest"
+yarn workspace @ha-ai/collector up "*@latest"
+yarn workspace @ha-ai/tools up "*@latest"
+yarn workspace @ha-ai/ui up "*@latest"
 yarn test:integration
 yarn test:integration:collector
 yarn test:integration:tools
