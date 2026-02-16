@@ -3,7 +3,7 @@
 This is the simplified runbook for first-time setup and updates.
 
 Goal:
-- Run `collector`, `retention`, `automation-snapshots`, `analytics`, `daily-home-summary`, `postgres`, `pgadmin` on one Debian 13 VM.
+- Run `collector`, `retention`, `automation-snapshots`, `analytics`, `daily-home-summary`, `postgres`, `pgadmin`, `ui` on one Debian 13 VM.
 - Connect collector to Home Assistant OS (HAOS) running on a different VM on the same Proxmox host.
 - Deploy updates by running one command with a new image tag.
 
@@ -19,6 +19,7 @@ Write these values down first:
 - Strong passwords:
   - `POSTGRES_PASSWORD`
   - `PGADMIN_DEFAULT_PASSWORD`
+  - `UI_BASIC_AUTH_PASSWORD`
 - A GHCR image tag to deploy:
   - production: `sha-<commit>`
   - PR testing: `pr-<number>-sha-<short-sha>`
@@ -155,7 +156,7 @@ From VM:
 
 ```bash
 cd /opt/ha-ai/app
-sudo APP_OWNER="$USER" LAN_CIDR=192.168.1.0/24 ./ops/proxmox/bootstrap.sh
+sudo APP_OWNER="$USER" LAN_CIDR=192.168.1.0/24 PGADMIN_LAN_PORT=5050 UI_LAN_PORT=5080 ./ops/proxmox/bootstrap.sh
 ```
 
 This installs and configures:
@@ -165,7 +166,7 @@ This installs and configures:
   - `/opt/ha-ai/app`
   - `/opt/ha-ai/state`
   - `/opt/ha-ai/backups`
-- UFW rules (SSH + pgAdmin on `5050` for your LAN CIDR)
+- UFW rules (SSH + pgAdmin on `5050` + operator UI on `5080` for your LAN CIDR)
 - helper commands:
   - `ha-ai-status`
   - `ha-ai-deploy`
@@ -193,6 +194,8 @@ OPENAI_API_KEY=<your-openai-key>
 
 POSTGRES_PASSWORD=<strong-password>
 PGADMIN_DEFAULT_PASSWORD=<strong-password>
+UI_BASIC_AUTH_USERNAME=operator
+UI_BASIC_AUTH_PASSWORD=<strong-password>
 
 AUTOMATION_SNAPSHOT_SCHEDULE_TIME=03:15
 AUTOMATION_SNAPSHOT_INCLUDE_CONFIG=true
@@ -244,13 +247,14 @@ If successful, verify:
 ```bash
 ha-ai-status
 docker compose -f /opt/ha-ai/app/docker-compose.prod.yml --env-file /opt/ha-ai/.env.prod ps
-docker compose -f /opt/ha-ai/app/docker-compose.prod.yml --env-file /opt/ha-ai/.env.prod logs -f collector retention automation-snapshots analytics daily-home-summary
+docker compose -f /opt/ha-ai/app/docker-compose.prod.yml --env-file /opt/ha-ai/.env.prod logs -f collector retention automation-snapshots analytics daily-home-summary ui
 ```
 
 Expected:
 
 - services running
 - collector logs show successful HA websocket auth/subscription
+- UI loads on `http://<APP_VM_IP>:5080` and prompts for basic-auth credentials
 
 ## 8) Sanity-check data is flowing
 
@@ -337,6 +341,14 @@ Check:
 - service is running:
   - `docker compose -f /opt/ha-ai/app/docker-compose.prod.yml --env-file /opt/ha-ai/.env.prod ps pgadmin`
 
+### UI not reachable from laptop
+
+Check:
+- VM firewall allows `5080` from `LAN_CIDR`
+- `UI_PORT_BIND=5080` is set in `/opt/ha-ai/.env.prod`
+- service is running:
+  - `docker compose -f /opt/ha-ai/app/docker-compose.prod.yml --env-file /opt/ha-ai/.env.prod ps ui`
+
 ### Services unhealthy after update
 
 Rollback immediately:
@@ -344,6 +356,18 @@ Rollback immediately:
 ```bash
 cd /opt/ha-ai/app
 ./ops/proxmox/rollback.sh
+```
+
+### Deploy fails with `network ... not found`
+
+This usually means Docker has stale network references for older containers.
+`deploy.sh` and `rollback.sh` now auto-recover by recreating the compose network and containers (without deleting volumes).
+If you still see this after pulling latest scripts, run:
+
+```bash
+cd /opt/ha-ai/app
+docker compose -f docker-compose.prod.yml --env-file /opt/ha-ai/.env.prod down --remove-orphans
+./ops/proxmox/deploy.sh --tag <tag>
 ```
 
 ## Advanced/maintenance

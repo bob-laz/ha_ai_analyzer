@@ -90,6 +90,33 @@ services:
       - ./:/app
       - ./reports:/app/reports
 
+  ui:
+    build:
+      context: .
+      dockerfile: collector/Dockerfile
+    container_name: ha_ai_ui
+    restart: unless-stopped
+    profiles: ["ui"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ha_ai}:${POSTGRES_PASSWORD:-ha_ai_dev_password}@postgres:5432/${POSTGRES_DB:-ha_ai}
+      UI_HOST: 0.0.0.0
+      UI_PORT: ${UI_PORT:-5080}
+      UI_PORT_BIND: ${UI_PORT_BIND:-5080}
+      UI_BASIC_AUTH_USERNAME: ${UI_BASIC_AUTH_USERNAME:-operator}
+      UI_BASIC_AUTH_PASSWORD: ${UI_BASIC_AUTH_PASSWORD:-operator}
+      UI_ACTION_STATUS_TTL_SECONDS: ${UI_ACTION_STATUS_TTL_SECONDS:-900}
+      UI_DEFAULT_POLL_INTERVAL_MS: ${UI_DEFAULT_POLL_INTERVAL_MS:-10000}
+      UI_BUILD_VERSION: local-dev
+      UI_WORKSPACE_ROOT: /app
+      UI_YARN_BIN: yarn
+    command: ["yarn", "workspace", "@ha-ai/ui", "start:ui"]
+    working_dir: /app
+    ports:
+      - "${UI_PORT_BIND:-5080}:${UI_PORT:-5080}"
+
   pgadmin:
     image: dpage/pgadmin4:9
     container_name: ha_ai_pgadmin

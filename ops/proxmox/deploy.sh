@@ -109,9 +109,9 @@ echo "Pulling updated images..."
 compose_cmd pull
 
 echo "Applying updated services..."
-compose_cmd up -d
+compose_up_with_network_recovery
 
-SERVICES=(postgres collector retention analytics pgadmin)
+SERVICES=(postgres collector retention automation-snapshots analytics daily-home-summary pgadmin ui)
 if ! wait_for_services 180 "${SERVICES[@]}"; then
   echo "One or more services failed to reach running/healthy state after deployment." >&2
   compose_cmd ps >&2 || true

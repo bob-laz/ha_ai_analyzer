@@ -5,38 +5,53 @@ Monorepo for collecting Home Assistant events into Postgres and generating analy
 ## Architecture
 
 ```mermaid
-flowchart LR
-  HA["Home Assistant<br/>(LAN or dev-ha)"] -->|"WebSocket events<br/>state_changed / call_service"| C["Collector<br/>@ha-ai/collector"]
-  C -->|"Normalized + filtered events"| E["Postgres<br/>events (partitioned)"]
-
-  E --> T["Tools Runtime<br/>@ha-ai/tools"]
-  T --> AR["analysis_results"]
-  T --> RUNS["agent_runs / insights / evidence / recommendations"]
-  T --> AS["automation_snapshots"]
-  T --> ENV["ha_environment_snapshots"]
-  T --> USG["ha_usage_snapshots"]
-
-  T -->|"persistent_notification.create"| HA
-
-  subgraph Jobs["tools schedulers"]
-    A["analytics (--schedule)"]
-    D["daily-home-summary (--schedule)"]
-    S["automation-snapshots (--schedule)"]
-    R["retention (--schedule)"]
+flowchart TB
+  subgraph Inputs["Home Environment"]
+    HA["Home Assistant<br/>(LAN or dev-ha)"]
+    LLM["OpenAI API"]
   end
 
-  T --- Jobs
+  subgraph Runtime["Application Runtime"]
+    C["Collector<br/>@ha-ai/collector"]
+    T["Tools Runtime<br/>@ha-ai/tools"]
+    UI["Operator UI<br/>@ha-ai/ui"]
+    subgraph Jobs["tools schedulers"]
+      A["analytics (--schedule)"]
+      D["daily-home-summary (--schedule)"]
+      S["automation-snapshots (--schedule)"]
+      R["retention (--schedule)"]
+    end
+  end
+
+  subgraph Data["Postgres"]
+    E["events (partitioned)"]
+    AR["analysis_results"]
+    RUNS["agent_runs / insights / evidence / recommendations"]
+    AS["automation_snapshots"]
+    ENV["ha_environment_snapshots"]
+    USG["ha_usage_snapshots"]
+  end
+
+  HA -->|"WebSocket events"| C
+  C -->|"normalized + filtered writes"| E
+  E -->|"query + report reads"| T
   A -->|"LLM analysis + report"| AR
+  A -->|"artifact rows"| RUNS
+  A -->|"prompt + completion"| LLM
   D -->|"daily summary + anomaly report"| AR
   S --> AS
   S --> ENV
   S --> USG
   R -->|"TTL + partition maintenance"| E
+  T -->|"persistent_notification.create"| HA
+  UI -->|"read APIs + manual actions"| T
+  UI -->|"status + triage queries"| E
+  T --- Jobs
 ```
 
 ## Overview
 
-This project has two runtime components:
+This project has three runtime components:
 
 - Collector (`@ha-ai/collector`): subscribes to Home Assistant websocket events and ingests normalized records into Postgres.
 - Tools (`@ha-ai/tools`): provides query tools (summary, top changes, context tracing, timelines, correlations, automation snapshots/listing) and an LLM analysis job that writes `agent_runs`, `insights`, `evidence`, `recommendations`, and `analysis_results`.
@@ -44,6 +59,7 @@ This project has two runtime components:
   - utility usage snapshots (`energy`, `water`, `gas`, `power`) are captured into `ha_usage_snapshots` and passed into analysis agents.
   - analytics runs can publish a Home Assistant `persistent_notification` with a human-readable summary for each completed LLM analysis pass.
   - includes a separate daily-home-summary agent that compares daily activity to prior days, flags anomalies, persists a report, and posts a Home Assistant notification.
+- UI (`@ha-ai/ui`): LAN-only operator console served by Fastify + React for health visibility, runs/recommendation triage, report/event views, and manual one-shot action triggers.
 
 Collector ingest defaults include noise suppression for Home Assistant event spam:
 - drop `state_changed` records where `old_state.state` equals `new_state.state`
@@ -54,6 +70,7 @@ Collector ingest defaults include noise suppression for Home Assistant event spa
 
 - `collector/` collector package
 - `tools/` analytics and LLM package
+- `ui/` operator dashboard package
 - `schema/` baseline SQL bootstrap (`001_init.sql`)
 - `scripts/` local development scripts
 - `docker-compose.yml` local containers and profiles
@@ -69,6 +86,7 @@ For package-specific commands, environment variables, and troubleshooting:
 
 - `collector/README.md`
 - `tools/README.md`
+- `ui/README.md`
 
 ## Onboarding Guides
 
@@ -121,6 +139,13 @@ yarn dev:collector --mode=dev-ha
 OPENAI_API_KEY='<token>' yarn start:analysis:once
 ```
 
+6. (Optional) Start local operator UI:
+
+```bash
+yarn dev:ui:up
+# then open http://127.0.0.1:5080
+```
+
 ## Root Commands
 
 From `/Users/bob/code/homeassistant/ha_ai_analyzer`:
@@ -139,7 +164,10 @@ yarn dev:db:up
 yarn dev:down
 yarn dev:collector --mode=lan
 yarn dev:collector --mode=dev-ha
+yarn dev:ui:up
+yarn dev:ui:logs
 yarn start:collector
+yarn start:ui
 yarn start:analytics
 yarn start:automation-snapshots
 yarn start:daily-home-summary
@@ -179,3 +207,5 @@ yarn start:analysis:scheduler
 - CI image publish workflow: `/Users/bob/code/homeassistant/ha_ai_analyzer/.github/workflows/publish-image.yml`
 
 See `/Users/bob/code/homeassistant/ha_ai_analyzer/docs/deploy-proxmox.md` for full setup, update, rollback, and backup instructions.
+
+Deployment scripts now include stale Docker network auto-recovery (`network ... not found`) by recreating compose networking/containers without deleting volumes.

@@ -5,23 +5,52 @@ Analytics and LLM analysis package for Home Assistant event data.
 ## Architecture
 
 ```mermaid
-flowchart TD
-  PG["Postgres"] --> Q["agentTools.ts<br/>query tools"]
-  Q --> R["analysisRunner.ts"]
-  R --> LLM["llm/*<br/>prompt builder + provider + normalizer"]
-  LLM --> R
-  R --> REPO["analysisRepo.ts"]
+flowchart TB
+  HA["Home Assistant HTTP API"]
+  LLM["OpenAI API"]
+  PG["Postgres"]
+
+  subgraph QueryLayer["Query + Persistence Layer"]
+    Q["agentTools.ts<br/>summary/top-changes/trace/timeline/correlate"]
+    PR["publishReport()"]
+    REPO["analysisRepo.ts"]
+  end
+
+  subgraph Analysis["LLM Analysis Path"]
+    AJ["analyticsJob.ts"]
+    AR["analysisRunner.ts"]
+    PB["llm/promptBuilder.ts"]
+    OP["llm/openaiProvider.ts"]
+    ON["llm/outputNormalizer.ts"]
+  end
+
+  subgraph Jobs["Non-LLM Scheduled Jobs"]
+    ASJ["automationSnapshotJob.ts"]
+    DLY["dailyHomeSummaryJob.ts"]
+    RTN["retentionJob.ts"]
+  end
+
+  PG --> Q
+  Q --> AR
+  AR --> PB
+  PB --> OP
+  OP -->|"chat completion"| LLM
+  LLM --> OP
+  OP --> ON
+  ON --> AR
+  AR --> REPO
+  AR --> PR
   REPO --> PG
-  R --> PR["publishReport()"]
   PR --> PG
 
-  ASJ["automationSnapshotJob.ts"] -->|"automation/script/scene/blueprints"| PG
-  ASJ -->|"env inventory + usage snapshots"| PG
-  RTN["retentionJob.ts"] -->|"partition precreate/drop + TTL deletes"| PG
-  DLY["dailyHomeSummaryJob.ts"] -->|"daily report + anomaly detection"| PR
+  ASJ -->|"automation snapshots"| PG
+  ASJ -->|"environment snapshots"| PG
+  ASJ -->|"usage snapshots"| PG
+  DLY --> Q
+  DLY --> PR
+  RTN -->|"TTL + partition maintenance"| PG
 
-  AJ["analyticsJob.ts"] --> R
-  AJ -->|"persistent_notification.create"| HA["Home Assistant HTTP API"]
+  AJ -->|"persistent_notification.create"| HA
   DLY -->|"persistent_notification.create"| HA
 ```
 

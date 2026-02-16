@@ -37,6 +37,26 @@ compose_cmd() {
   docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
 }
 
+compose_up_with_network_recovery() {
+  local output=""
+
+  if output="$(compose_cmd up -d 2>&1)"; then
+    printf '%s\n' "$output"
+    return 0
+  fi
+
+  printf '%s\n' "$output" >&2
+
+  if [[ "$output" == *"failed to set up container networking"* && "$output" == *"network"* && "$output" == *"not found"* ]]; then
+    echo "Detected stale Docker network reference. Recreating compose network and containers..." >&2
+    compose_cmd down --remove-orphans || true
+    compose_cmd up -d --force-recreate
+    return 0
+  fi
+
+  return 1
+}
+
 wait_for_services() {
   local timeout_seconds="$1"
   shift

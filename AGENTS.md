@@ -21,6 +21,10 @@ Guidance for coding agents working in this repository. Prioritize ingestion reli
 - `tools/`: analytics/tool package
 - `tools/src/`: tool/query interfaces and analytics job
 - `tools/tests/`: tool integration tests
+- `ui/`: operator dashboard package (Fastify API + React web app)
+- `ui/src/server/`: API routes, auth, and action runner
+- `ui/src/web/`: frontend routes and polling views
+- `ui/tests/`: UI backend/unit tests
 - `schema/`: baseline SQL bootstrap (future additive migrations when needed)
 - `docker-compose.yml`: local stack
 - `docker-compose.prod.yml`: Proxmox production stack
@@ -43,11 +47,14 @@ Run from repo root:
 - Start local Home Assistant only: `yarn dev:ha:up`
 - Tail local Home Assistant logs: `yarn dev:ha:logs`
 - Emit local Home Assistant demo events: `yarn dev:ha:emit-demo`
+- Start local operator UI service: `yarn dev:ui:up`
+- Tail local operator UI logs: `yarn dev:ui:logs`
 - Verify all checks: `yarn verify`
 - Lint: `yarn lint`
 - Format: `yarn format`
 - Type check: `yarn lint:type`
 - Run collector: `yarn start:collector`
+- Run UI server: `yarn start:ui`
 - Run analytics: `yarn start:analytics`
 - Run automation snapshot sync once: `yarn start:automation-snapshots:once`
 - Run automation snapshot scheduler: `yarn start:automation-snapshots:scheduler`
@@ -62,6 +69,7 @@ Package-specific:
 
 - Collector: `yarn workspace @ha-ai/collector <script>`
 - Tools: `yarn workspace @ha-ai/tools <script>`
+- UI: `yarn workspace @ha-ai/ui <script>`
 
 Proxmox operations (run on VM):
 
@@ -95,6 +103,8 @@ Proxmox operations (run on VM):
 - `getDailySummary`, `getTopChanges`, and `traceContext` are implemented paths and must remain stable.
 - Query tool set (`getDailySummary`, `getTopChanges`, `traceContext`, `entityTimeline`, `correlate`, `getAutomationSnapshot`, `listAutomations`, `publishReport`) should remain implemented and contract-stable.
 - `publishReport` should persist to `analysis_results` when a DB client is provided.
+- UI API `/api/*` routes should remain basic-auth protected and LAN-oriented.
+- UI manual actions should remain one-shot trigger wrappers (`--once`) for tools jobs.
 - LLM analysis runner should remain provider-agnostic (`LLMProvider` interface) with OpenAI as current concrete provider.
 - LLM recommendations are propose-only; never auto-apply automation changes.
 - LLM analysis input should include latest Home Assistant environment snapshot context (devices/services/integrations/addons) from `ha_environment_snapshots` when available.
@@ -114,6 +124,7 @@ Proxmox operations (run on VM):
 - LLM analysis changes should include unit tests for prompt/output normalization and runner lifecycle behavior.
 - LLM scheduler changes should include tests for next-run calculation and overlap lock behavior.
 - DB-backed analysis integration tests should validate `agent_runs` lifecycle and artifact persistence.
+- UI changes should include server/auth/action tests for modified API or action behavior.
 - `yarn test:integration*` scripts should ensure `docker compose` postgres is running and healthy before executing tests.
 - `dev-ha` compose profile is for local development only and should stay minimal (no production assumptions).
 - `dev:collector --mode=dev-ha` readiness checks should treat Home Assistant onboarding redirects as healthy startup.
@@ -130,11 +141,12 @@ Proxmox operations (run on VM):
 - Automation snapshot sync should capture `automation`, `script`, `scene`, and blueprint context rows in `automation_snapshots` (blueprints included when discoverable from entity config and/or HA blueprint listing endpoints).
 - Automation snapshot sync should also capture Home Assistant environment inventory rows (`device`, `service`, `integration`, `addon`) in `ha_environment_snapshots`.
 - Automation snapshot sync should capture utility/resource usage sensor readings into `ha_usage_snapshots`.
-- `dev:down` should include `debug`, `dev-ha`, and `analytics` profiles to prevent stale in-use compose network errors during teardown.
+- `dev:down` should include `debug`, `dev-ha`, `analytics`, and `ui` profiles to prevent stale in-use compose network errors during teardown.
 - `pgadmin/servers.json` should register `ha_ai_postgres` for local dev, and compose should keep server import enabled on startup.
 - pgAdmin default login and master-password behavior should be configurable via `.env` (`PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`, `PGADMIN_MASTER_PASSWORD_REQUIRED`).
 - pgAdmin registered server password should default from DB env configuration (`PGADMIN_DB_PASSWORD` fallback to `POSTGRES_PASSWORD`).
 - Proxmox deploy/rollback scripts should validate Docker/Compose/env preconditions and persist release state in `/opt/ha-ai/state`.
+- Proxmox deploy/rollback scripts should recover automatically from stale Docker compose network references (`network ... not found`) without deleting volumes.
 - Proxmox backup script should emit `pg_dump -Fc` artifacts and prune by configurable retention days.
 
 ## CI Expectations
