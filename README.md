@@ -207,3 +207,5 @@ yarn start:analysis:scheduler
 - CI image publish workflow: `/Users/bob/code/homeassistant/ha_ai_analyzer/.github/workflows/publish-image.yml`
 
 See `/Users/bob/code/homeassistant/ha_ai_analyzer/docs/deploy-proxmox.md` for full setup, update, rollback, and backup instructions.
+
+Deployment scripts now include stale Docker network auto-recovery (`network ... not found`) by recreating compose networking/containers without deleting volumes.

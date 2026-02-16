@@ -358,6 +358,18 @@ cd /opt/ha-ai/app
 ./ops/proxmox/rollback.sh
 ```
 
+### Deploy fails with `network ... not found`
+
+This usually means Docker has stale network references for older containers.
+`deploy.sh` and `rollback.sh` now auto-recover by recreating the compose network and containers (without deleting volumes).
+If you still see this after pulling latest scripts, run:
+
+```bash
+cd /opt/ha-ai/app
+docker compose -f docker-compose.prod.yml --env-file /opt/ha-ai/.env.prod down --remove-orphans
+./ops/proxmox/deploy.sh --tag <tag>
+```
+
 ## Advanced/maintenance
 
 Drift reconciliation (optional Ansible):

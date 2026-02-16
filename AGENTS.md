@@ -146,6 +146,7 @@ Proxmox operations (run on VM):
 - pgAdmin default login and master-password behavior should be configurable via `.env` (`PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`, `PGADMIN_MASTER_PASSWORD_REQUIRED`).
 - pgAdmin registered server password should default from DB env configuration (`PGADMIN_DB_PASSWORD` fallback to `POSTGRES_PASSWORD`).
 - Proxmox deploy/rollback scripts should validate Docker/Compose/env preconditions and persist release state in `/opt/ha-ai/state`.
+- Proxmox deploy/rollback scripts should recover automatically from stale Docker compose network references (`network ... not found`) without deleting volumes.
 - Proxmox backup script should emit `pg_dump -Fc` artifacts and prune by configurable retention days.
 
 ## CI Expectations
