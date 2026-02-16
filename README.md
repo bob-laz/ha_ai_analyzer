@@ -2,12 +2,48 @@
 
 Monorepo for collecting Home Assistant events into Postgres and generating analysis artifacts from that data.
 
+## Architecture
+
+```mermaid
+flowchart LR
+  HA["Home Assistant<br/>(LAN or dev-ha)"] -->|"WebSocket events<br/>state_changed / call_service"| C["Collector<br/>@ha-ai/collector"]
+  C -->|"Normalized + filtered events"| E["Postgres<br/>events (partitioned)"]
+
+  E --> T["Tools Runtime<br/>@ha-ai/tools"]
+  T --> AR["analysis_results"]
+  T --> RUNS["agent_runs / insights / evidence / recommendations"]
+  T --> AS["automation_snapshots"]
+  T --> ENV["ha_environment_snapshots"]
+  T --> USG["ha_usage_snapshots"]
+
+  T -->|"persistent_notification.create"| HA
+
+  subgraph Jobs["tools schedulers"]
+    A["analytics (--schedule)"]
+    D["daily-home-summary (--schedule)"]
+    S["automation-snapshots (--schedule)"]
+    R["retention (--schedule)"]
+  end
+
+  T --- Jobs
+  A -->|"LLM analysis + report"| AR
+  D -->|"daily summary + anomaly report"| AR
+  S --> AS
+  S --> ENV
+  S --> USG
+  R -->|"TTL + partition maintenance"| E
+```
+
 ## Overview
 
 This project has two runtime components:
 
 - Collector (`@ha-ai/collector`): subscribes to Home Assistant websocket events and ingests normalized records into Postgres.
 - Tools (`@ha-ai/tools`): provides query tools (summary, top changes, context tracing, timelines, correlations, automation snapshots/listing) and an LLM analysis job that writes `agent_runs`, `insights`, `evidence`, `recommendations`, and `analysis_results`.
+  - includes an automation snapshot sync scheduler for `automation`, `script`, `scene`, blueprint context rows, and Home Assistant environment inventory rows (`device`, `service`, `integration`, `addon`) captured into `ha_environment_snapshots`.
+  - utility usage snapshots (`energy`, `water`, `gas`, `power`) are captured into `ha_usage_snapshots` and passed into analysis agents.
+  - analytics runs can publish a Home Assistant `persistent_notification` with a human-readable summary for each completed LLM analysis pass.
+  - includes a separate daily-home-summary agent that compares daily activity to prior days, flags anomalies, persists a report, and posts a Home Assistant notification.
 
 Collector ingest defaults include noise suppression for Home Assistant event spam:
 - drop `state_changed` records where `old_state.state` equals `new_state.state`
@@ -68,7 +104,7 @@ cp .env.example .env
 yarn dev:db:up
 ```
 
-Retention scheduler starts automatically when `yarn dev:collector` starts.
+Retention scheduler and automation snapshot scheduler start automatically when `yarn dev:collector` starts.
 pgAdmin defaults come from `.env` (`PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`) and the registered `ha_ai_postgres` server reuses your configured DB password.
 
 4. Run collector locally (choose mode):
@@ -105,7 +141,13 @@ yarn dev:collector --mode=lan
 yarn dev:collector --mode=dev-ha
 yarn start:collector
 yarn start:analytics
+yarn start:automation-snapshots
+yarn start:daily-home-summary
 yarn start:retention --once
+yarn start:automation-snapshots:once
+yarn start:automation-snapshots:scheduler
+yarn start:daily-home-summary:once
+yarn start:daily-home-summary:scheduler
 yarn start:analysis:once
 yarn start:analysis:scheduler
 ```

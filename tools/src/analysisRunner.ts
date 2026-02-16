@@ -15,7 +15,18 @@ import { type AnalysisRepo, analysisRepo, type EvidenceInsert, type Recommendati
 import type { SqlQueryable } from './db.js';
 import { normalizeAgentOutput } from './llm/outputNormalizer.js';
 import type { LLMProvider } from './llm/provider.js';
-import type { AnalysisPromptInput, EvidenceCatalogItem, NormalizedAgentOutput, TraceBundle } from './llm/types.js';
+import type {
+  AnalysisPromptInput,
+  EvidenceCatalogItem,
+  HomeAssistantInventory,
+  HomeAssistantInventoryItem,
+  HomeAssistantInventoryType,
+  NormalizedAgentOutput,
+  ResourceUsageReading,
+  ResourceUsageSnapshot,
+  ResourceUsageType,
+  TraceBundle,
+} from './llm/types.js';
 
 export type AnalysisRunnerConfig = {
   runType: string;
@@ -26,6 +37,8 @@ export type AnalysisRunnerConfig = {
   maxTraceContexts: number;
   maxEventsPerContext: number;
   traceMaxDepth: number;
+  maxEnvironmentItemsPerType: number;
+  maxResourceUsageItemsPerType: number;
 };
 
 export type AnalysisRunResult = {
@@ -148,6 +161,18 @@ const buildMarkdownReport = (normalized: NormalizedAgentOutput, input: AnalysisP
   lines.push(`- Generated at: ${normalized.generatedAt}`);
   lines.push(`- Window: ${input.window.start} to ${input.window.end} (${input.window.timezone})`);
   lines.push(`- Total events in summary day: ${input.dailySummary.totalEvents}`);
+  if (input.homeAssistantInventory) {
+    lines.push(`- HA inventory snapshot: ${input.homeAssistantInventory.capturedAt}`);
+    lines.push(
+      `- HA inventory counts: devices ${input.homeAssistantInventory.countsByType.device}, services ${input.homeAssistantInventory.countsByType.service}, integrations ${input.homeAssistantInventory.countsByType.integration}, addons ${input.homeAssistantInventory.countsByType.addon}`,
+    );
+  }
+  if (input.resourceUsageSnapshot) {
+    lines.push(`- Resource usage snapshot: ${input.resourceUsageSnapshot.capturedAt}`);
+    lines.push(
+      `- Resource usage counts: energy ${input.resourceUsageSnapshot.countsByType.energy}, water ${input.resourceUsageSnapshot.countsByType.water}, gas ${input.resourceUsageSnapshot.countsByType.gas}, power ${input.resourceUsageSnapshot.countsByType.power}`,
+    );
+  }
   lines.push('');
   lines.push('## Summary');
   lines.push(normalized.summary);
@@ -189,6 +214,98 @@ const buildMarkdownReport = (normalized: NormalizedAgentOutput, input: AnalysisP
   return lines.join('\n');
 };
 
+const compactServiceMetadata = (item: HomeAssistantInventoryItem): Record<string, unknown> => {
+  const serviceId = item.resourceId;
+  const [domain, service] = serviceId.split('.', 2);
+  const definition =
+    item.metadata.definition && typeof item.metadata.definition === 'object'
+      ? (item.metadata.definition as Record<string, unknown>)
+      : {};
+  const fields =
+    definition.fields && typeof definition.fields === 'object' ? (definition.fields as Record<string, unknown>) : {};
+  const target =
+    definition.target && typeof definition.target === 'object' ? (definition.target as Record<string, unknown>) : {};
+
+  return {
+    id: serviceId,
+    label: item.label,
+    domain: domain ?? null,
+    service: service ?? null,
+    fieldNames: Object.keys(fields).slice(0, 12),
+    hasTargetSelector: Object.keys(target).length > 0,
+  };
+};
+
+const compactDeviceMetadata = (item: HomeAssistantInventoryItem): Record<string, unknown> => {
+  return {
+    id: item.resourceId,
+    label: item.label,
+    manufacturer: typeof item.metadata.manufacturer === 'string' ? item.metadata.manufacturer : null,
+    model: typeof item.metadata.model === 'string' ? item.metadata.model : null,
+    areaId: typeof item.metadata.area_id === 'string' ? item.metadata.area_id : null,
+    disabledBy: typeof item.metadata.disabled_by === 'string' ? item.metadata.disabled_by : null,
+  };
+};
+
+const compactIntegrationMetadata = (item: HomeAssistantInventoryItem): Record<string, unknown> => {
+  const raw =
+    item.metadata.raw && typeof item.metadata.raw === 'object' ? (item.metadata.raw as Record<string, unknown>) : {};
+  const supportsUnload =
+    typeof raw.supports_unload === 'boolean' ? raw.supports_unload : typeof raw.supports_unload === 'number';
+
+  return {
+    id: item.resourceId,
+    label: item.label,
+    domain: typeof item.metadata.domain === 'string' ? item.metadata.domain : null,
+    state: typeof item.metadata.state === 'string' ? item.metadata.state : null,
+    source: typeof item.metadata.source === 'string' ? item.metadata.source : null,
+    disabledBy: typeof item.metadata.disabledBy === 'string' ? item.metadata.disabledBy : null,
+    supportsUnload,
+  };
+};
+
+const compactAddonMetadata = (item: HomeAssistantInventoryItem): Record<string, unknown> => {
+  return {
+    id: item.resourceId,
+    label: item.label,
+    version: typeof item.metadata.version === 'string' ? item.metadata.version : null,
+    installed: typeof item.metadata.installed === 'boolean' ? item.metadata.installed : null,
+    state: typeof item.metadata.state === 'string' ? item.metadata.state : null,
+    updateAvailable:
+      typeof item.metadata.update_available === 'boolean'
+        ? item.metadata.update_available
+        : typeof item.metadata.update_available === 'string'
+          ? item.metadata.update_available
+          : null,
+  };
+};
+
+const compactInventoryByType = (
+  inventory: HomeAssistantInventory,
+): Record<HomeAssistantInventoryType, Array<Record<string, unknown>>> => ({
+  device: inventory.itemsByType.device.map(compactDeviceMetadata),
+  service: inventory.itemsByType.service.map(compactServiceMetadata),
+  integration: inventory.itemsByType.integration.map(compactIntegrationMetadata),
+  addon: inventory.itemsByType.addon.map(compactAddonMetadata),
+});
+
+const compactUsageReading = (reading: ResourceUsageReading): Record<string, unknown> => ({
+  entityId: reading.entityId,
+  reading: reading.readingNumeric ?? reading.readingText,
+  unit: reading.unit,
+  friendlyName: typeof reading.metadata.friendlyName === 'string' ? reading.metadata.friendlyName : null,
+  stateClass: typeof reading.metadata.stateClass === 'string' ? reading.metadata.stateClass : null,
+});
+
+const compactUsageByType = (
+  snapshot: ResourceUsageSnapshot,
+): Record<ResourceUsageType, Array<Record<string, unknown>>> => ({
+  energy: snapshot.itemsByType.energy.map(compactUsageReading),
+  water: snapshot.itemsByType.water.map(compactUsageReading),
+  gas: snapshot.itemsByType.gas.map(compactUsageReading),
+  power: snapshot.itemsByType.power.map(compactUsageReading),
+});
+
 const withTransaction = async <T>(pool: Pool, fn: (client: PoolClient) => Promise<T>): Promise<T> => {
   const client = await pool.connect();
   try {
@@ -228,6 +345,8 @@ export const runAnalysis = async (
     maxTraceContexts: config.maxTraceContexts,
     maxEventsPerContext: config.maxEventsPerContext,
     traceMaxDepth: config.traceMaxDepth,
+    maxEnvironmentItemsPerType: config.maxEnvironmentItemsPerType,
+    maxResourceUsageItemsPerType: config.maxResourceUsageItemsPerType,
     llmProvider: provider.constructor.name,
   };
 
@@ -260,6 +379,20 @@ export const runAnalysis = async (
       windowEnd.toISOString(),
       config.maxTraceContexts,
     );
+    const environmentInventory = await repo.getLatestEnvironmentInventory(pool, config.maxEnvironmentItemsPerType);
+    const compactEnvironmentInventory = environmentInventory
+      ? {
+          ...environmentInventory,
+          compactItemsByType: compactInventoryByType(environmentInventory),
+        }
+      : null;
+    const resourceUsageSnapshot = await repo.getLatestResourceUsageSnapshot(pool, config.maxResourceUsageItemsPerType);
+    const compactResourceUsageSnapshot = resourceUsageSnapshot
+      ? {
+          ...resourceUsageSnapshot,
+          compactItemsByType: compactUsageByType(resourceUsageSnapshot),
+        }
+      : null;
 
     const tracedContexts: TraceBundle[] = [];
     const truncatedContexts: Array<{ contextId: string; originalEvents: number; retainedEvents: number }> = [];
@@ -295,6 +428,8 @@ export const runAnalysis = async (
       topChanges,
       tracedContexts,
       evidenceCatalog,
+      homeAssistantInventory: compactEnvironmentInventory,
+      resourceUsageSnapshot: compactResourceUsageSnapshot,
       constraints: {
         maxInsights: config.maxInsights,
         recommendationPolicy: 'propose_only',
@@ -319,6 +454,8 @@ export const runAnalysis = async (
       rankedInsights: normalized.rankedInsights,
       proposedAutomationChanges: normalized.proposedAutomationChanges,
       summary: normalized.summary,
+      homeAssistantInventory: compactEnvironmentInventory,
+      resourceUsageSnapshot: compactResourceUsageSnapshot,
       truncation: {
         maxEventsPerContext: config.maxEventsPerContext,
         truncatedContexts,

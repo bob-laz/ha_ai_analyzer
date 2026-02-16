@@ -1,7 +1,15 @@
 import type { QueryResultRow } from 'pg';
 
 import type { SqlQueryable } from './db.js';
-import type { NormalizedInsight } from './llm/types.js';
+import type {
+  HomeAssistantInventory,
+  HomeAssistantInventoryItem,
+  HomeAssistantInventoryType,
+  NormalizedInsight,
+  ResourceUsageReading,
+  ResourceUsageSnapshot,
+  ResourceUsageType,
+} from './llm/types.js';
 
 const toNumber = (value: unknown): number => {
   const parsed = Number(value);
@@ -49,6 +57,8 @@ export interface AnalysisRepo {
   completeAgentRun(db: SqlQueryable, runId: number, metadata: Record<string, unknown>): Promise<void>;
   failAgentRun(db: SqlQueryable, runId: number, error: Record<string, unknown>): Promise<void>;
   listTopContextIds(db: SqlQueryable, windowStart: string, windowEnd: string, limit: number): Promise<string[]>;
+  getLatestEnvironmentInventory(db: SqlQueryable, maxItemsPerType: number): Promise<HomeAssistantInventory | null>;
+  getLatestResourceUsageSnapshot(db: SqlQueryable, maxItemsPerType: number): Promise<ResourceUsageSnapshot | null>;
   insertInsights(db: SqlQueryable, runId: number, insights: NormalizedInsight[]): Promise<InsightRecord[]>;
   insertEvidence(db: SqlQueryable, evidenceRows: EvidenceInsert[]): Promise<void>;
   insertRecommendations(db: SqlQueryable, runId: number, recommendations: RecommendationInsert[]): Promise<void>;
@@ -85,6 +95,80 @@ WHERE event_time >= $1::timestamptz
 GROUP BY context_id
 ORDER BY event_count DESC, context_id ASC
 LIMIT $3
+`;
+
+const LATEST_ENVIRONMENT_INVENTORY_SQL = `
+WITH latest AS (
+  SELECT MAX(captured_at) AS captured_at
+  FROM ha_environment_snapshots
+),
+snapshot_rows AS (
+  SELECT
+    h.snapshot_type,
+    h.resource_id,
+    h.label,
+    h.metadata,
+    h.captured_at,
+    ROW_NUMBER() OVER (
+      PARTITION BY h.snapshot_type
+      ORDER BY COALESCE(NULLIF(h.label, ''), h.resource_id), h.resource_id
+    ) AS row_number_by_type,
+    COUNT(*) OVER (PARTITION BY h.snapshot_type) AS total_count_by_type
+  FROM ha_environment_snapshots h
+  JOIN latest l
+    ON l.captured_at IS NOT NULL
+   AND h.captured_at = l.captured_at
+)
+SELECT
+  snapshot_type,
+  resource_id,
+  label,
+  metadata,
+  captured_at,
+  total_count_by_type
+FROM snapshot_rows
+WHERE row_number_by_type <= $1
+ORDER BY snapshot_type ASC, row_number_by_type ASC
+`;
+
+const LATEST_USAGE_SNAPSHOT_SQL = `
+WITH latest AS (
+  SELECT MAX(captured_at) AS captured_at
+  FROM ha_usage_snapshots
+),
+snapshot_rows AS (
+  SELECT
+    h.usage_type,
+    h.entity_id,
+    h.reading_numeric,
+    h.reading_text,
+    h.unit,
+    h.metadata,
+    h.captured_at,
+    ROW_NUMBER() OVER (
+      PARTITION BY h.usage_type
+      ORDER BY
+        h.reading_numeric DESC NULLS LAST,
+        h.entity_id ASC
+    ) AS row_number_by_type,
+    COUNT(*) OVER (PARTITION BY h.usage_type) AS total_count_by_type
+  FROM ha_usage_snapshots h
+  JOIN latest l
+    ON l.captured_at IS NOT NULL
+   AND h.captured_at = l.captured_at
+)
+SELECT
+  usage_type,
+  entity_id,
+  reading_numeric,
+  reading_text,
+  unit,
+  metadata,
+  captured_at,
+  total_count_by_type
+FROM snapshot_rows
+WHERE row_number_by_type <= $1
+ORDER BY usage_type ASC, row_number_by_type ASC
 `;
 
 const INSERT_INSIGHT_SQL = `
@@ -160,6 +244,170 @@ export const analysisRepo: AnalysisRepo = {
   async listTopContextIds(db, windowStart, windowEnd, limit) {
     const result = await db.query<{ context_id: string }>(TOP_CONTEXTS_SQL, [windowStart, windowEnd, limit]);
     return result.rows.map((row) => row.context_id);
+  },
+
+  async getLatestEnvironmentInventory(db, maxItemsPerType) {
+    type Row = {
+      snapshot_type: HomeAssistantInventoryType | string;
+      resource_id: string;
+      label: string | null;
+      metadata: unknown;
+      captured_at: string | Date;
+      total_count_by_type: number | string;
+    };
+
+    let result: { rows: Row[] };
+    try {
+      result = await db.query<Row>(LATEST_ENVIRONMENT_INVENTORY_SQL, [maxItemsPerType]);
+    } catch (error) {
+      const code =
+        error && typeof error === 'object' && 'code' in error ? String((error as { code: unknown }).code) : '';
+      if (code === '42P01') {
+        return null;
+      }
+      throw error;
+    }
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const countsByType: Record<HomeAssistantInventoryType, number> = {
+      device: 0,
+      service: 0,
+      integration: 0,
+      addon: 0,
+    };
+    const truncatedByType: Record<HomeAssistantInventoryType, number> = {
+      device: 0,
+      service: 0,
+      integration: 0,
+      addon: 0,
+    };
+    const itemsByType: Record<HomeAssistantInventoryType, HomeAssistantInventoryItem[]> = {
+      device: [],
+      service: [],
+      integration: [],
+      addon: [],
+    };
+
+    const capturedAt = new Date(result.rows[0].captured_at).toISOString();
+
+    for (const row of result.rows) {
+      const type = row.snapshot_type;
+      if (type !== 'device' && type !== 'service' && type !== 'integration' && type !== 'addon') {
+        continue;
+      }
+
+      const totalCount = toNumber(row.total_count_by_type);
+      countsByType[type] = Math.max(countsByType[type], totalCount);
+      itemsByType[type].push({
+        resourceId: row.resource_id,
+        label: row.label,
+        metadata:
+          row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+            ? (row.metadata as Record<string, unknown>)
+            : {},
+      });
+    }
+
+    for (const type of ['device', 'service', 'integration', 'addon'] as const) {
+      const explicitCount = countsByType[type];
+      const fallbackCount = itemsByType[type].length;
+      const actualCount = explicitCount > 0 ? explicitCount : fallbackCount;
+      countsByType[type] = actualCount;
+      truncatedByType[type] = Math.max(0, actualCount - itemsByType[type].length);
+    }
+
+    return {
+      capturedAt,
+      countsByType,
+      truncatedByType,
+      itemsByType,
+    };
+  },
+
+  async getLatestResourceUsageSnapshot(db, maxItemsPerType) {
+    type Row = {
+      usage_type: ResourceUsageType | string;
+      entity_id: string;
+      reading_numeric: number | string | null;
+      reading_text: string;
+      unit: string | null;
+      metadata: unknown;
+      captured_at: string | Date;
+      total_count_by_type: number | string;
+    };
+
+    let result: { rows: Row[] };
+    try {
+      result = await db.query<Row>(LATEST_USAGE_SNAPSHOT_SQL, [maxItemsPerType]);
+    } catch (error) {
+      const code =
+        error && typeof error === 'object' && 'code' in error ? String((error as { code: unknown }).code) : '';
+      if (code === '42P01') {
+        return null;
+      }
+      throw error;
+    }
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const countsByType: Record<ResourceUsageType, number> = {
+      energy: 0,
+      water: 0,
+      gas: 0,
+      power: 0,
+    };
+    const truncatedByType: Record<ResourceUsageType, number> = {
+      energy: 0,
+      water: 0,
+      gas: 0,
+      power: 0,
+    };
+    const itemsByType: Record<ResourceUsageType, ResourceUsageReading[]> = {
+      energy: [],
+      water: [],
+      gas: [],
+      power: [],
+    };
+
+    const capturedAt = new Date(result.rows[0].captured_at).toISOString();
+    for (const row of result.rows) {
+      const type = row.usage_type;
+      if (type !== 'energy' && type !== 'water' && type !== 'gas' && type !== 'power') {
+        continue;
+      }
+
+      countsByType[type] = Math.max(countsByType[type], toNumber(row.total_count_by_type));
+      itemsByType[type].push({
+        entityId: row.entity_id,
+        readingNumeric: row.reading_numeric === null ? null : Number(row.reading_numeric),
+        readingText: row.reading_text,
+        unit: row.unit,
+        metadata:
+          row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+            ? (row.metadata as Record<string, unknown>)
+            : {},
+      });
+    }
+
+    for (const type of ['energy', 'water', 'gas', 'power'] as const) {
+      const explicitCount = countsByType[type];
+      const fallbackCount = itemsByType[type].length;
+      const actualCount = explicitCount > 0 ? explicitCount : fallbackCount;
+      countsByType[type] = actualCount;
+      truncatedByType[type] = Math.max(0, actualCount - itemsByType[type].length);
+    }
+
+    return {
+      capturedAt,
+      countsByType,
+      truncatedByType,
+      itemsByType,
+    };
   },
 
   async insertInsights(db, runId, insights) {

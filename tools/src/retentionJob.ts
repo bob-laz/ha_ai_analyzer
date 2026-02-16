@@ -21,6 +21,8 @@ export type RetentionConfig = {
   traceContextsRetentionDays: number;
   entitySnapshotsRetentionDays: number;
   automationSnapshotsRetentionDays: number;
+  haEnvironmentSnapshotsRetentionDays: number;
+  haUsageSnapshotsRetentionDays: number;
   agentRunsRetentionDays: number;
   orphanAnalysisResultsRetentionDays: number;
   batchSize: number;
@@ -35,6 +37,8 @@ type RetentionPassStats = {
     traceContexts: number;
     entitySnapshots: number;
     automationSnapshots: number;
+    haEnvironmentSnapshots: number;
+    haUsageSnapshots: number;
     agentRuns: number;
     orphanAnalysisResults: number;
   };
@@ -93,6 +97,8 @@ const resolveConfig = (): RetentionConfig => {
     traceContextsRetentionDays: parsePositiveInt(process.env.TRACE_CONTEXTS_RETENTION_DAYS, 30),
     entitySnapshotsRetentionDays: parsePositiveInt(process.env.ENTITY_SNAPSHOTS_RETENTION_DAYS, 30),
     automationSnapshotsRetentionDays: parsePositiveInt(process.env.AUTOMATION_SNAPSHOTS_RETENTION_DAYS, 60),
+    haEnvironmentSnapshotsRetentionDays: parsePositiveInt(process.env.HA_ENVIRONMENT_SNAPSHOTS_RETENTION_DAYS, 60),
+    haUsageSnapshotsRetentionDays: parsePositiveInt(process.env.HA_USAGE_SNAPSHOTS_RETENTION_DAYS, 180),
     agentRunsRetentionDays: parsePositiveInt(process.env.AGENT_RUNS_RETENTION_DAYS, 180),
     orphanAnalysisResultsRetentionDays: parsePositiveInt(process.env.ORPHAN_ANALYSIS_RESULTS_RETENTION_DAYS, 180),
     batchSize: parsePositiveInt(process.env.RETENTION_BATCH_SIZE, 50_000),
@@ -227,6 +233,40 @@ export const runRetentionPass = async (pool: Pool, config: RetentionConfig): Pro
     config.batchSize,
   );
 
+  const haEnvironmentSnapshotsDeleted = await deleteInBatches(
+    pool,
+    `
+      WITH doomed AS (
+        SELECT ctid
+        FROM ha_environment_snapshots
+        WHERE captured_at < NOW() - ($1::int || ' days')::interval
+        LIMIT $2
+      )
+      DELETE FROM ha_environment_snapshots t
+      USING doomed d
+      WHERE t.ctid = d.ctid
+    `,
+    [config.haEnvironmentSnapshotsRetentionDays],
+    config.batchSize,
+  );
+
+  const haUsageSnapshotsDeleted = await deleteInBatches(
+    pool,
+    `
+      WITH doomed AS (
+        SELECT ctid
+        FROM ha_usage_snapshots
+        WHERE captured_at < NOW() - ($1::int || ' days')::interval
+        LIMIT $2
+      )
+      DELETE FROM ha_usage_snapshots t
+      USING doomed d
+      WHERE t.ctid = d.ctid
+    `,
+    [config.haUsageSnapshotsRetentionDays],
+    config.batchSize,
+  );
+
   const agentRunsDeleted = await deleteInBatches(
     pool,
     `
@@ -271,6 +311,8 @@ export const runRetentionPass = async (pool: Pool, config: RetentionConfig): Pro
       traceContexts: traceContextsDeleted,
       entitySnapshots: entitySnapshotsDeleted,
       automationSnapshots: automationSnapshotsDeleted,
+      haEnvironmentSnapshots: haEnvironmentSnapshotsDeleted,
+      haUsageSnapshots: haUsageSnapshotsDeleted,
       agentRuns: agentRunsDeleted,
       orphanAnalysisResults: orphanAnalysisResultsDeleted,
     },

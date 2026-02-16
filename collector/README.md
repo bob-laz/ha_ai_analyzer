@@ -2,6 +2,24 @@
 
 Home Assistant websocket ingestion service.
 
+## Architecture
+
+```mermaid
+flowchart TD
+  HA["Home Assistant WebSocket API"] --> HC["haClient.ts<br/>auth + subscribe + reconnect"]
+  HC --> N["normalize.ts<br/>entity/service/context normalization"]
+  N --> F["filters.ts<br/>event type + domain + noise filters"]
+  F --> D["db.ts<br/>batch buffer + flush loop"]
+  D --> PG["Postgres events table<br/>partitioned by event_time"]
+
+  CFG["config.ts<br/>env parsing + defaults"] --> HC
+  CFG --> F
+  CFG --> D
+
+  SIG["process signals<br/>SIGINT/SIGTERM"] --> D
+  D -->|"final flush"| PG
+```
+
 ## Responsibilities
 
 - Connect to Home Assistant websocket API with token auth.

@@ -24,7 +24,13 @@
     "lint:type": "yarn workspaces foreach -A run lint:type",
     "start:collector": "yarn workspace @ha-ai/collector start:collector",
     "start:analytics": "yarn workspace @ha-ai/tools start:analytics",
+    "start:automation-snapshots": "yarn workspace @ha-ai/tools start:automation-snapshots",
+    "start:daily-home-summary": "yarn workspace @ha-ai/tools start:daily-home-summary",
     "start:retention": "yarn workspace @ha-ai/tools start:retention",
+    "start:automation-snapshots:once": "yarn workspace @ha-ai/tools start:automation-snapshots --once",
+    "start:automation-snapshots:scheduler": "yarn workspace @ha-ai/tools start:automation-snapshots --schedule",
+    "start:daily-home-summary:once": "yarn workspace @ha-ai/tools start:daily-home-summary --once",
+    "start:daily-home-summary:scheduler": "yarn workspace @ha-ai/tools start:daily-home-summary --schedule",
     "start:analysis:once": "yarn workspace @ha-ai/tools start:analytics --once",
     "start:analysis:scheduler": "yarn workspace @ha-ai/tools start:analytics --schedule"
   },
