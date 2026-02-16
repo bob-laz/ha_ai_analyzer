@@ -75,7 +75,7 @@ describe('runAutomationSnapshotPass', () => {
             {
               entity_id: 'automation.kitchen_lights',
               state: 'on',
-              attributes: { friendly_name: 'Kitchen Lights' },
+              attributes: { friendly_name: 'Kitchen Lights', id: 1234 },
               context: { id: 'ctx-a' },
             },
             {
@@ -87,7 +87,7 @@ describe('runAutomationSnapshotPass', () => {
             {
               entity_id: 'scene.relax',
               state: 'unknown',
-              attributes: { friendly_name: 'Relax Scene' },
+              attributes: { friendly_name: 'Relax Scene', id: 'scene-relax-id' },
               context: { id: 'ctx-c' },
             },
             {
@@ -112,17 +112,43 @@ describe('runAutomationSnapshotPass', () => {
                 unit_of_measurement: 'm3',
               },
             },
+            {
+              entity_id: 'sensor.power_status',
+              state: 'unavailable',
+              attributes: {
+                friendly_name: 'Power Status',
+                device_class: 'power',
+                unit_of_measurement: 'W',
+              },
+            },
+            {
+              entity_id: 'sensor.energy_mode',
+              state: 'online',
+              attributes: {
+                friendly_name: 'Energy Mode',
+                device_class: 'energy',
+                unit_of_measurement: 'kWh',
+              },
+            },
+            {
+              entity_id: 'sensor.power_status_estimate',
+              state: '5',
+              attributes: {
+                friendly_name: 'Power Status Estimate',
+                device_class: 'enum',
+              },
+            },
           ]),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
       }
 
-      if (url.endsWith('/api/config/automation/config/kitchen_lights')) {
+      if (url.endsWith('/api/config/automation/config/1234')) {
         return new Response(
           JSON.stringify({
-            trigger: [{ platform: 'state' }],
-            action: [{ service: 'light.turn_on' }],
-            condition: [],
+            triggers: [{ platform: 'state' }],
+            actions: [{ service: 'light.turn_on' }],
+            conditions: [],
             use_blueprint: { path: 'my_pack/motion_lights.yaml', input: { area: 'kitchen' } },
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -138,7 +164,7 @@ describe('runAutomationSnapshotPass', () => {
         );
       }
 
-      if (url.endsWith('/api/config/scene/config/relax')) {
+      if (url.endsWith('/api/config/scene/config/scene-relax-id')) {
         return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
 
@@ -158,11 +184,17 @@ describe('runAutomationSnapshotPass', () => {
     const stats = await runAutomationSnapshotPass(createPool(calls), createConfig());
 
     expect(stats.trackedEntities).toBe(3);
-    expect(stats.entityRowsInserted).toBe(6);
+    expect(stats.entityRowsInserted).toBe(9);
     expect(stats.insertedRows).toBe(4); // automation + script + scene + blueprint
     expect(stats.blueprintRowsInserted).toBe(1);
     expect(stats.configFetches).toBe(3);
     expect(stats.configFetchFailures).toBe(0);
+    expect(stats.configFetchesByDomain).toEqual({
+      automation: 1,
+      scene: 1,
+      script: 1,
+    });
+    expect(stats.configFetchFailuresByDomain).toEqual({});
     expect(stats.environmentRowsInserted).toBe(0);
     expect(stats.environmentCountsByType).toEqual({});
     expect(stats.usageRowsInserted).toBe(2);
@@ -170,6 +202,9 @@ describe('runAutomationSnapshotPass', () => {
       energy: 1,
       gas: 1,
     });
+    expect(stats.usageRowsDroppedUnavailableText).toBe(1);
+    expect(stats.usageRowsDroppedNonNumeric).toBe(1);
+    expect(stats.usageRowsDroppedNonMeterLike).toBe(1);
 
     const insertCalls = calls.filter((call) => call.sql.includes('INSERT INTO automation_snapshots'));
     expect(insertCalls).toHaveLength(4);
@@ -179,6 +214,12 @@ describe('runAutomationSnapshotPass', () => {
     expect(insertedIds).toContain('script.goodnight');
     expect(insertedIds).toContain('scene.relax');
     expect(insertedIds).toContain('blueprint:my_pack/motion_lights.yaml');
+
+    const automationInsert = insertCalls.find((call) => call.params?.[0] === 'automation.kitchen_lights');
+    expect(automationInsert).toBeDefined();
+    expect(automationInsert?.params?.[3]).toBe(JSON.stringify([{ platform: 'state' }]));
+    expect(automationInsert?.params?.[4]).toBe(JSON.stringify([{ service: 'light.turn_on' }]));
+    expect(automationInsert?.params?.[5]).toBe(JSON.stringify([]));
   });
 
   test('continues when per-entity config endpoints are unavailable', async () => {
@@ -209,9 +250,14 @@ describe('runAutomationSnapshotPass', () => {
     expect(stats.insertedRows).toBe(1);
     expect(stats.configFetches).toBe(1);
     expect(stats.configFetchFailures).toBe(1);
+    expect(stats.configFetchesByDomain).toEqual({ automation: 1 });
+    expect(stats.configFetchFailuresByDomain).toEqual({ automation: 1 });
     expect(stats.environmentRowsInserted).toBe(0);
     expect(stats.environmentCountsByType).toEqual({});
     expect(stats.usageRowsInserted).toBe(0);
     expect(stats.usageCountsByType).toEqual({});
+    expect(stats.usageRowsDroppedUnavailableText).toBe(0);
+    expect(stats.usageRowsDroppedNonNumeric).toBe(0);
+    expect(stats.usageRowsDroppedNonMeterLike).toBe(0);
   });
 });

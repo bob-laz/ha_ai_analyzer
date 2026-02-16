@@ -113,8 +113,10 @@ Proxmox operations (run on VM):
 - Reference Home Assistant API docs when implementing/updating HA REST integrations: https://developers.home-assistant.io/docs/api/rest/
 - LLM analysis runner should remain provider-agnostic (`LLMProvider` interface) with OpenAI as current concrete provider.
 - LLM recommendations are propose-only; never auto-apply automation changes.
+- LLM recommendation outputs should include `related_insight_rank`; recommendation rows that cannot map rank->inserted insight id should be dropped (not inserted) and counted in run metadata.
 - LLM analysis input should include latest Home Assistant environment snapshot context (devices/services/integrations/addons) from `ha_environment_snapshots` when available.
 - LLM and daily-summary agents should include latest utility usage snapshot context (`energy`/`water`/`gas`/`power`) from `ha_usage_snapshots` when available.
+- Usage snapshot persistence should keep only numeric, meter-like sensor readings (drop unavailable/unknown/non-numeric status rows).
 - Analytics runtime should publish a readable Home Assistant `persistent_notification` after successful analysis runs when `LLM_HA_NOTIFICATION_ENABLED=true`.
 - Daily home summary agent should compare the target day against prior baseline days, flag metric anomalies, persist report output, and publish Home Assistant notification when enabled.
 - Collector numeric env parsing should apply documented fallbacks when values are unset or blank.
@@ -145,6 +147,7 @@ Proxmox operations (run on VM):
 - `dev:collector --mode=...` should auto-start daily home summary scheduler by default (disable with `DAILY_SUMMARY_AUTOSTART=false`).
 - Automation snapshot sync should run once immediately on scheduler startup, then on schedule.
 - Automation snapshot sync should capture `automation`, `script`, `scene`, and blueprint context rows in `automation_snapshots` (blueprints included when discoverable from entity config and/or HA blueprint listing endpoints).
+- Automation/scene config sync should prefer Home Assistant config ids from entity `attributes.id` when present, and parse both singular/plural config keys for trigger/action/condition extraction.
 - Automation snapshot sync should capture current Home Assistant entity states into `entity_snapshots` for UI entity-state inspection.
 - Automation snapshot sync should also capture Home Assistant environment inventory rows (`device`, `service`, `integration`, `addon`) in `ha_environment_snapshots`.
 - Automation snapshot sync should capture utility/resource usage sensor readings into `ha_usage_snapshots`.

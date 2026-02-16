@@ -1373,9 +1373,16 @@ const SnapshotsPage = ({ pollIntervalMs }: { pollIntervalMs: number }): ReactEle
         </div>
       </section>
 
-      {view === 'automation' ? <AutomationSnapshotsPane pollIntervalMs={pollIntervalMs} limit={limit} search={search} /> : null}
+      {view === 'automation' ? (
+        <AutomationSnapshotsPane pollIntervalMs={pollIntervalMs} limit={limit} search={search} />
+      ) : null}
       {view === 'blueprint' ? (
-        <EnvironmentSnapshotsPane pollIntervalMs={pollIntervalMs} limit={limit} search={search} snapshotType="blueprint" />
+        <EnvironmentSnapshotsPane
+          pollIntervalMs={pollIntervalMs}
+          limit={limit}
+          search={search}
+          snapshotType="blueprint"
+        />
       ) : null}
       {view === 'script' ? (
         <EnvironmentSnapshotsPane pollIntervalMs={pollIntervalMs} limit={limit} search={search} snapshotType="script" />

@@ -58,7 +58,9 @@ This project has three runtime components:
   - includes an automation snapshot sync scheduler where `automation`, `script`, `scene`, and blueprint context rows are captured into `automation_snapshots`.
   - captures current Home Assistant entity states into `entity_snapshots` for UI entity-state inspection.
   - Home Assistant environment inventory rows (`device`, `service`, `integration`, `addon`) are captured into `ha_environment_snapshots`.
-  - utility usage snapshots (`energy`, `water`, `gas`, `power`) are captured into `ha_usage_snapshots` and passed into analysis agents.
+  - utility usage snapshots (`energy`, `water`, `gas`, `power`) are captured into `ha_usage_snapshots` and passed into analysis agents; only numeric meter-like readings are persisted.
+  - recommendation persistence requires valid `related_insight_rank` linkage; rows that cannot be mapped to an inserted insight rank are dropped from `recommendations` and recorded in run metadata.
+  - automation/scene config snapshot extraction should use Home Assistant config IDs from `attributes.id` when available, and normalize singular/plural config keys (`trigger`/`triggers`, `action`/`actions`, `condition`/`conditions`).
   - analytics runs can publish a Home Assistant `persistent_notification` with a human-readable summary for each completed LLM analysis pass.
   - includes a separate daily-home-summary agent that compares daily activity to prior days, flags anomalies, persists a report, and posts a Home Assistant notification.
 - UI (`@ha-ai/ui`): LAN-only operator console served by Fastify + React for health visibility, runs/recommendation triage, report/event views, and manual one-shot action triggers.

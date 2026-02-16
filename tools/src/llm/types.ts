@@ -86,7 +86,7 @@ export type AgentRecommendationOutput = {
   reasoning: string;
   proposed_yaml_patch?: string;
   estimated_impact?: string;
-  related_insight_rank?: number;
+  related_insight_rank: number;
 };
 
 export type AgentOutput = {
@@ -114,7 +114,7 @@ export type NormalizedRecommendation = {
   reasoning: string;
   proposedYamlPatch: string | null;
   estimatedImpact: string | null;
-  relatedInsightRank: number | null;
+  relatedInsightRank: number;
 };
 
 export type NormalizedAgentOutput = {

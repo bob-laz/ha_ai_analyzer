@@ -82,4 +82,67 @@ describe('normalizeAgentOutput', () => {
       ),
     ).toThrow(AgentOutputValidationError);
   });
+
+  test('throws when recommendation related insight rank is missing or invalid', () => {
+    expect(() =>
+      normalizeAgentOutput(
+        {
+          run_id: 'run-1',
+          generated_at: '2026-01-02T01:00:00.000Z',
+          ranked_insights: [
+            {
+              rank: 1,
+              title: 'Valid insight',
+              confidence: 0.5,
+              root_cause: 'root',
+              evidence_ids: ['event:1'],
+            },
+          ],
+          proposed_automation_changes: [
+            {
+              automation_id: 'automation.kitchen_lights',
+              change_type: 'adjust_trigger',
+              reasoning: 'Reasonable change',
+            },
+          ],
+        },
+        {
+          expectedRunId: 'run-1',
+          generatedAt: '2026-01-02T01:00:00.000Z',
+          maxInsights: 5,
+        },
+      ),
+    ).toThrow('related_insight_rank');
+
+    expect(() =>
+      normalizeAgentOutput(
+        {
+          run_id: 'run-1',
+          generated_at: '2026-01-02T01:00:00.000Z',
+          ranked_insights: [
+            {
+              rank: 1,
+              title: 'Valid insight',
+              confidence: 0.5,
+              root_cause: 'root',
+              evidence_ids: ['event:1'],
+            },
+          ],
+          proposed_automation_changes: [
+            {
+              automation_id: 'automation.kitchen_lights',
+              change_type: 'adjust_trigger',
+              reasoning: 'Reasonable change',
+              related_insight_rank: 1.5,
+            },
+          ],
+        },
+        {
+          expectedRunId: 'run-1',
+          generatedAt: '2026-01-02T01:00:00.000Z',
+          maxInsights: 5,
+        },
+      ),
+    ).toThrow('related_insight_rank');
+  });
 });

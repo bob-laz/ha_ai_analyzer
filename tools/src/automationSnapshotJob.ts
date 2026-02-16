@@ -94,11 +94,16 @@ export type AutomationSnapshotPassStats = {
   insertedRows: number;
   configFetches: number;
   configFetchFailures: number;
+  configFetchesByDomain: Record<string, number>;
+  configFetchFailuresByDomain: Record<string, number>;
   blueprintRowsInserted: number;
   environmentRowsInserted: number;
   environmentCountsByType: Record<string, number>;
   usageRowsInserted: number;
   usageCountsByType: Record<string, number>;
+  usageRowsDroppedNonNumeric: number;
+  usageRowsDroppedUnavailableText: number;
+  usageRowsDroppedNonMeterLike: number;
 };
 
 const TARGET_ENTITY_PREFIXES = ['automation.', 'script.', 'scene.'] as const;
@@ -509,6 +514,7 @@ const extractBlueprintRef = (
 const extractConfigForEntity = async (
   config: AutomationSnapshotConfig,
   entityId: string,
+  attributes: Record<string, unknown>,
 ): Promise<{
   trigger: unknown[];
   action: unknown[];
@@ -526,11 +532,39 @@ const extractConfigForEntity = async (
   }
 
   const objectId = entityId.split('.').slice(1).join('.');
-  const configIds = objectId && objectId !== entityId ? [objectId, entityId] : [entityId];
+  const attributeIdRaw = attributes.id;
+  const attributeId =
+    typeof attributeIdRaw === 'string'
+      ? attributeIdRaw.trim()
+      : typeof attributeIdRaw === 'number' && Number.isFinite(attributeIdRaw)
+        ? String(attributeIdRaw)
+        : '';
+
+  const configIdCandidates: string[] = [];
+  const addCandidate = (value: string): void => {
+    const trimmed = value.trim();
+    if (!trimmed || configIdCandidates.includes(trimmed)) {
+      return;
+    }
+    configIdCandidates.push(trimmed);
+  };
+
+  if (domain === 'automation' || domain === 'scene') {
+    addCandidate(attributeId);
+    if (objectId && objectId !== entityId) {
+      addCandidate(objectId);
+    }
+    addCandidate(entityId);
+  } else {
+    if (objectId && objectId !== entityId) {
+      addCandidate(objectId);
+    }
+    addCandidate(entityId);
+  }
 
   let payload: unknown | null = null;
   let fetchFailed = false;
-  for (const configId of configIds) {
+  for (const configId of configIdCandidates) {
     try {
       payload = await fetchJson(config, `/api/config/${domain}/config/${encodeURIComponent(configId)}`, true);
     } catch {
@@ -548,9 +582,9 @@ const extractConfigForEntity = async (
 
   const asRecord = toRecord(payload);
   return {
-    trigger: toArray(asRecord.trigger),
-    action: toArray(asRecord.action),
-    condition: toArray(asRecord.condition),
+    trigger: toArray(asRecord.trigger ?? asRecord.triggers),
+    action: toArray(asRecord.action ?? asRecord.actions),
+    condition: toArray(asRecord.condition ?? asRecord.conditions),
     rawConfig: asRecord,
     failed: false,
   };
@@ -875,6 +909,8 @@ const USAGE_UNIT_HINTS: Array<{ usageType: UsageSnapshotType; pattern: RegExp }>
   { usageType: 'gas', pattern: /^(m3|m³|ft3|ft³|therm|therms|ccf)$/i },
   { usageType: 'power', pattern: /^(w|kw|mw)$/i },
 ];
+const USAGE_DEVICE_CLASS_SET = new Set(['energy', 'water', 'gas', 'power']);
+const UNAVAILABLE_USAGE_TEXT_SET = new Set(['', 'unknown', 'unavailable', 'none', 'null']);
 
 const inferUsageType = (entityId: string, deviceClassRaw: unknown, unitRaw: unknown): UsageSnapshotType | null => {
   const deviceClass = typeof deviceClassRaw === 'string' ? deviceClassRaw.trim().toLowerCase() : '';
@@ -932,12 +968,42 @@ const toOptionalNumber = (raw: unknown): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const buildUsageRows = (states: HassState[], includeUsageSnapshots: boolean): UsageSnapshotRow[] => {
+const isMeterLikeUsageState = (deviceClassRaw: unknown, unitRaw: unknown): boolean => {
+  const deviceClass = typeof deviceClassRaw === 'string' ? deviceClassRaw.trim().toLowerCase() : '';
+  if (USAGE_DEVICE_CLASS_SET.has(deviceClass)) {
+    return true;
+  }
+
+  const unit = typeof unitRaw === 'string' ? unitRaw.trim() : '';
+  if (!unit) {
+    return false;
+  }
+
+  return USAGE_UNIT_HINTS.some((hint) => hint.pattern.test(unit));
+};
+
+const buildUsageRows = (
+  states: HassState[],
+  includeUsageSnapshots: boolean,
+): {
+  rows: UsageSnapshotRow[];
+  usageRowsDroppedNonNumeric: number;
+  usageRowsDroppedUnavailableText: number;
+  usageRowsDroppedNonMeterLike: number;
+} => {
   if (!includeUsageSnapshots) {
-    return [];
+    return {
+      rows: [],
+      usageRowsDroppedNonNumeric: 0,
+      usageRowsDroppedUnavailableText: 0,
+      usageRowsDroppedNonMeterLike: 0,
+    };
   }
 
   const rows: UsageSnapshotRow[] = [];
+  let usageRowsDroppedNonNumeric = 0;
+  let usageRowsDroppedUnavailableText = 0;
+  let usageRowsDroppedNonMeterLike = 0;
   for (const state of states) {
     const entityId = typeof state.entity_id === 'string' ? state.entity_id : '';
     if (!entityId) {
@@ -952,9 +1018,24 @@ const buildUsageRows = (states: HassState[], includeUsageSnapshots: boolean): Us
     if (!usageType) {
       continue;
     }
+    if (!isMeterLikeUsageState(attributes.device_class, attributes.unit_of_measurement)) {
+      usageRowsDroppedNonMeterLike += 1;
+      continue;
+    }
 
     const readingText = typeof state.state === 'string' ? state.state : String(state.state ?? '');
+    const normalizedReadingText = readingText.trim().toLowerCase();
+    if (UNAVAILABLE_USAGE_TEXT_SET.has(normalizedReadingText)) {
+      usageRowsDroppedUnavailableText += 1;
+      continue;
+    }
+
     const readingNumeric = toOptionalNumber(readingText);
+    if (readingNumeric === null) {
+      usageRowsDroppedNonNumeric += 1;
+      continue;
+    }
+
     const unit = typeof attributes.unit_of_measurement === 'string' ? attributes.unit_of_measurement : null;
 
     rows.push({
@@ -977,7 +1058,12 @@ const buildUsageRows = (states: HassState[], includeUsageSnapshots: boolean): Us
     deduped.set(row.entityId, row);
   }
 
-  return [...deduped.values()];
+  return {
+    rows: [...deduped.values()],
+    usageRowsDroppedNonNumeric,
+    usageRowsDroppedUnavailableText,
+    usageRowsDroppedNonMeterLike,
+  };
 };
 
 const buildEntitySnapshotRows = (states: HassState[]): EntitySnapshotRow[] => {
@@ -1072,6 +1158,8 @@ export const runAutomationSnapshotPass = async (
 
   let configFetches = 0;
   let configFetchFailures = 0;
+  const configFetchesByDomain: Record<string, number> = {};
+  const configFetchFailuresByDomain: Record<string, number> = {};
   const blueprintRefs: BlueprintRef[] = [];
 
   const entityRows = await mapWithConcurrency(trackedStates, config.configFetchConcurrency, async (state) => {
@@ -1086,13 +1174,15 @@ export const runAutomationSnapshotPass = async (
 
     if (config.includeConfig) {
       configFetches += 1;
-      const configResult = await extractConfigForEntity(config, entityId);
+      configFetchesByDomain[snapshotType] = (configFetchesByDomain[snapshotType] ?? 0) + 1;
+      const configResult = await extractConfigForEntity(config, entityId, attributes);
       trigger = configResult.trigger;
       action = configResult.action;
       condition = configResult.condition;
       rawConfig = configResult.rawConfig;
       if (configResult.failed) {
         configFetchFailures += 1;
+        configFetchFailuresByDomain[snapshotType] = (configFetchFailuresByDomain[snapshotType] ?? 0) + 1;
       } else {
         const blueprintRef = extractBlueprintRef(
           snapshotType === 'scene' ? 'scene' : snapshotType === 'script' ? 'script' : 'automation',
@@ -1129,7 +1219,8 @@ export const runAutomationSnapshotPass = async (
   const allRows = [...entityRows, ...blueprintRows];
   const entitySnapshotRows = buildEntitySnapshotRows(allStates);
   const environmentRows = await collectEnvironmentRows(config);
-  const usageRows = buildUsageRows(allStates, config.includeUsageSnapshots);
+  const usageSnapshotResult = buildUsageRows(allStates, config.includeUsageSnapshots);
+  const usageRows = usageSnapshotResult.rows;
 
   let entityRowsInserted = 0;
   let insertedRows = 0;
@@ -1208,11 +1299,16 @@ export const runAutomationSnapshotPass = async (
     insertedRows,
     configFetches,
     configFetchFailures,
+    configFetchesByDomain,
+    configFetchFailuresByDomain,
     blueprintRowsInserted: blueprintRows.length,
     environmentRowsInserted,
     environmentCountsByType,
     usageRowsInserted,
     usageCountsByType,
+    usageRowsDroppedNonNumeric: usageSnapshotResult.usageRowsDroppedNonNumeric,
+    usageRowsDroppedUnavailableText: usageSnapshotResult.usageRowsDroppedUnavailableText,
+    usageRowsDroppedNonMeterLike: usageSnapshotResult.usageRowsDroppedNonMeterLike,
   };
 };
 

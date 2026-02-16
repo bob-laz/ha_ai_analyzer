@@ -204,9 +204,7 @@ const buildMarkdownReport = (normalized: NormalizedAgentOutput, input: AnalysisP
       if (change.proposedYamlPatch) {
         lines.push(`  - Proposed patch: ${change.proposedYamlPatch}`);
       }
-      if (change.relatedInsightRank !== null) {
-        lines.push(`  - Related insight rank: ${change.relatedInsightRank}`);
-      }
+      lines.push(`  - Related insight rank: ${change.relatedInsightRank}`);
       lines.push(`  - Status: proposed`);
     }
   }
@@ -512,23 +510,37 @@ export const runAnalysis = async (
 
       await repo.insertEvidence(client, evidenceRows);
 
-      const recommendationRows: RecommendationInsert[] = normalized.proposedAutomationChanges.map((change) => ({
-        insightId: change.relatedInsightRank === null ? null : (insightIdByRank.get(change.relatedInsightRank) ?? null),
-        recommendationType: change.changeType,
-        targetAutomationId: change.automationId,
-        changePayload: {
-          automationId: change.automationId,
-          changeType: change.changeType,
-          reasoning: change.reasoning,
-          proposedYamlPatch: change.proposedYamlPatch,
-          estimatedImpact: change.estimatedImpact,
-          relatedInsightRank: change.relatedInsightRank,
-          policy: 'propose_only',
-        },
-        status: 'proposed',
-      }));
+      const recommendationDropReasons: Record<string, number> = {};
+      const recommendationRows: RecommendationInsert[] = [];
+      for (const change of normalized.proposedAutomationChanges) {
+        const insightId = insightIdByRank.get(change.relatedInsightRank);
+        if (!insightId) {
+          recommendationDropReasons.missing_rank_mapping = (recommendationDropReasons.missing_rank_mapping ?? 0) + 1;
+          continue;
+        }
+
+        recommendationRows.push({
+          insightId,
+          recommendationType: change.changeType,
+          targetAutomationId: change.automationId,
+          changePayload: {
+            automationId: change.automationId,
+            changeType: change.changeType,
+            reasoning: change.reasoning,
+            proposedYamlPatch: change.proposedYamlPatch,
+            estimatedImpact: change.estimatedImpact,
+            relatedInsightRank: change.relatedInsightRank,
+            policy: 'propose_only',
+          },
+          status: 'proposed',
+        });
+      }
 
       await repo.insertRecommendations(client, run.id, recommendationRows);
+      const droppedRecommendationCount = Object.values(recommendationDropReasons).reduce(
+        (count, value) => count + value,
+        0,
+      );
 
       const published = await publishReport(markdown, reportPayload, client as SqlQueryable, run.id);
       if (published.status !== 'published') {
@@ -538,7 +550,10 @@ export const runAnalysis = async (
       await repo.completeAgentRun(client, run.id, {
         llm_analysis: {
           insights: normalized.rankedInsights.length,
-          recommendations: normalized.proposedAutomationChanges.length,
+          recommendations_requested: normalized.proposedAutomationChanges.length,
+          recommendations: recommendationRows.length,
+          dropped_recommendations: droppedRecommendationCount,
+          dropped_recommendation_reasons: recommendationDropReasons,
           evidence_rows: evidenceRows.length,
           analysis_result_id: published.analysisResultId ?? null,
           completed_at: new Date().toISOString(),
