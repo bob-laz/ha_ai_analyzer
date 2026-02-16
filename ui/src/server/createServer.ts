@@ -6,7 +6,11 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 
 import type {
   ActionAcceptedResponse,
+  AutomationSnapshotsResponse,
   AnomalyCard,
+  EntitySnapshotsResponse,
+  EnvironmentSnapshotType,
+  EnvironmentSnapshotsResponse,
   HealthResponse,
   LatestReportResponse,
   OverviewResponse,
@@ -118,6 +122,41 @@ type DbUsageRow = {
   captured_at: DbTimestamp;
 };
 
+type DbAutomationSnapshotRow = {
+  id: string | number;
+  automation_id: string;
+  alias: string | null;
+  is_enabled: boolean | null;
+  trigger_config: unknown;
+  action_config: unknown;
+  conditions_config: unknown;
+  metadata: Record<string, unknown> | null;
+  captured_at: DbTimestamp;
+  created_at: DbTimestamp;
+};
+
+type DbEnvironmentSnapshotRow = {
+  id: string | number;
+  snapshot_type: string;
+  resource_id: string;
+  label: string | null;
+  metadata: Record<string, unknown> | null;
+  captured_at: DbTimestamp;
+  created_at: DbTimestamp;
+};
+
+type DbEntitySnapshotRow = {
+  id: string | number;
+  entity_id: string;
+  state: string | null;
+  domain: string | null;
+  attributes: Record<string, unknown> | null;
+  context_id: string | null;
+  captured_at: DbTimestamp;
+  source_event_id: string | number | null;
+  created_at: DbTimestamp;
+};
+
 type DbHealthRow = {
   db_time: DbTimestamp;
   db_version: string;
@@ -178,6 +217,10 @@ const asRecord = (value: unknown): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 
+const asArray = (value: unknown): unknown[] => {
+  return Array.isArray(value) ? value : [];
+};
+
 const asString = (value: unknown): string | null => {
   if (typeof value !== 'string') {
     return null;
@@ -185,6 +228,9 @@ const asString = (value: unknown): string | null => {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
 };
+
+const AUTOMATION_SNAPSHOT_TYPE_SQL =
+  "COALESCE(NULLIF(metadata->>'snapshotType', ''), CASE WHEN automation_id LIKE 'blueprint:%' THEN 'blueprint' ELSE split_part(automation_id, '.', 1) END)";
 
 const mapRunRow = (row: DbRunRow): RunRow => {
   return {
@@ -250,6 +296,28 @@ const readRecommendationStatus = (value: unknown): 'accepted' | 'rejected' | nul
   return null;
 };
 
+const readEnvironmentSnapshotType = (value: unknown): EnvironmentSnapshotType | null => {
+  if (
+    value === 'automation' ||
+    value === 'script' ||
+    value === 'scene' ||
+    value === 'blueprint' ||
+    value === 'device' ||
+    value === 'service' ||
+    value === 'integration' ||
+    value === 'addon'
+  ) {
+    return value;
+  }
+  return null;
+};
+
+const isEnvironmentInventoryType = (
+  value: EnvironmentSnapshotType,
+): value is Extract<EnvironmentSnapshotType, 'device' | 'service' | 'integration' | 'addon'> => {
+  return value === 'device' || value === 'service' || value === 'integration' || value === 'addon';
+};
+
 const toActionOperationResponse = (operation: ReturnType<ActionRunner['start']>): ActionAcceptedResponse => {
   return { operation };
 };
@@ -257,7 +325,7 @@ const toActionOperationResponse = (operation: ReturnType<ActionRunner['start']>)
 const loadIndexHtml = async (config: UiConfig): Promise<string> => {
   const indexPath = join(config.webDistDir, 'index.html');
   const raw = await readFile(indexPath, 'utf8');
-  return raw.replace('__UI_DEFAULT_POLL_MS__', String(config.defaultPollIntervalMs));
+  return raw.replace('__UI_DEFAULT_POLL_MS_VALUE__', String(config.defaultPollIntervalMs));
 };
 
 export const createServer = async (options: CreateServerOptions): Promise<FastifyInstance> => {
@@ -491,7 +559,7 @@ export const createServer = async (options: CreateServerOptions): Promise<Fastif
 
     const row = result.rows[0];
     if (!row) {
-      return reply.code(404).send({ error: `No report found for '${reportType}'` });
+      return reply.code(204).send();
     }
 
     const response: LatestReportResponse = {
@@ -652,6 +720,350 @@ export const createServer = async (options: CreateServerOptions): Promise<Fastif
     }
 
     return response;
+  });
+
+  app.get('/api/snapshots/automations/current', async (request): Promise<AutomationSnapshotsResponse> => {
+    const query = request.query as Record<string, unknown>;
+    const limit = clampLimit(query.limit, 200, 500);
+    const search = asString(query.search);
+
+    const latestResult = await options.db.query<{ captured_at: DbTimestamp | null }>(
+      `SELECT MAX(captured_at) AS captured_at FROM automation_snapshots`,
+    );
+
+    const latestCapturedAtRaw = latestResult.rows[0]?.captured_at ?? null;
+    const latestCapturedAt = toIsoString(latestCapturedAtRaw);
+    if (!latestCapturedAtRaw || !latestCapturedAt) {
+      return {
+        capturedAt: null,
+        total: 0,
+        snapshots: [],
+      };
+    }
+
+    const whereClauses = ['captured_at = $1', `automation_id LIKE 'automation.%'`];
+    const whereParams: unknown[] = [latestCapturedAtRaw];
+
+    if (search) {
+      whereParams.push(`%${search}%`);
+      whereClauses.push(`(automation_id ILIKE $${whereParams.length} OR COALESCE(alias, '') ILIKE $${whereParams.length})`);
+    }
+
+    const totalResult = await options.db.query<{ total_count: string | number }>(
+      `
+        SELECT COUNT(*)::bigint AS total_count
+        FROM automation_snapshots
+        WHERE ${whereClauses.join(' AND ')}
+      `,
+      whereParams,
+    );
+
+    const rowParams = [...whereParams, limit];
+    const result = await options.db.query<DbAutomationSnapshotRow>(
+      `
+        SELECT
+          id,
+          automation_id,
+          alias,
+          is_enabled,
+          trigger_config,
+          action_config,
+          conditions_config,
+          metadata,
+          captured_at,
+          created_at
+        FROM automation_snapshots
+        WHERE ${whereClauses.join(' AND ')}
+        ORDER BY COALESCE(NULLIF(alias, ''), automation_id), automation_id
+        LIMIT $${rowParams.length}
+      `,
+      rowParams,
+    );
+
+    return {
+      capturedAt: latestCapturedAt,
+      total: toNumber(totalResult.rows[0]?.total_count ?? 0),
+      snapshots: result.rows.map((row) => {
+        return {
+          id: toNumber(row.id),
+          automationId: row.automation_id,
+          alias: row.alias,
+          isEnabled: row.is_enabled,
+          triggerConfig: asArray(row.trigger_config),
+          actionConfig: asArray(row.action_config),
+          conditionsConfig: asArray(row.conditions_config),
+          metadata: asRecord(row.metadata),
+          capturedAt: toIsoString(row.captured_at) ?? latestCapturedAt,
+          createdAt: toIsoString(row.created_at) ?? latestCapturedAt,
+        };
+      }),
+    };
+  });
+
+  app.get('/api/snapshots/environment/current', async (request, reply): Promise<EnvironmentSnapshotsResponse | FastifyReply> => {
+    const query = request.query as Record<string, unknown>;
+    const snapshotType = readEnvironmentSnapshotType(query.type);
+    const limit = clampLimit(query.limit, 200, 500);
+    const search = asString(query.search);
+
+    if (!snapshotType) {
+      return reply.code(400).send({
+        error: "type must be one of: automation, script, scene, blueprint, device, service, integration, addon",
+      });
+    }
+    if (isEnvironmentInventoryType(snapshotType)) {
+      const latestResult = await options.db.query<{ captured_at: DbTimestamp | null }>(
+        `
+          SELECT MAX(captured_at) AS captured_at
+          FROM ha_environment_snapshots
+          WHERE snapshot_type = $1
+        `,
+        [snapshotType],
+      );
+
+      const latestCapturedAtRaw = latestResult.rows[0]?.captured_at ?? null;
+      const latestCapturedAt = toIsoString(latestCapturedAtRaw);
+      if (!latestCapturedAtRaw || !latestCapturedAt) {
+        return {
+          snapshotType,
+          capturedAt: null,
+          total: 0,
+          snapshots: [],
+        };
+      }
+
+      const whereClauses = ['snapshot_type = $1', 'captured_at = $2'];
+      const whereParams: unknown[] = [snapshotType, latestCapturedAtRaw];
+
+      if (search) {
+        whereParams.push(`%${search}%`);
+        whereClauses.push(`(resource_id ILIKE $${whereParams.length} OR COALESCE(label, '') ILIKE $${whereParams.length})`);
+      }
+
+      const totalResult = await options.db.query<{ total_count: string | number }>(
+        `
+          SELECT COUNT(*)::bigint AS total_count
+          FROM ha_environment_snapshots
+          WHERE ${whereClauses.join(' AND ')}
+        `,
+        whereParams,
+      );
+
+      const rowParams = [...whereParams, limit];
+      const result = await options.db.query<DbEnvironmentSnapshotRow>(
+        `
+          SELECT
+            id,
+            snapshot_type,
+            resource_id,
+            label,
+            metadata,
+            captured_at,
+            created_at
+          FROM ha_environment_snapshots
+          WHERE ${whereClauses.join(' AND ')}
+          ORDER BY COALESCE(NULLIF(label, ''), resource_id), resource_id
+          LIMIT $${rowParams.length}
+        `,
+        rowParams,
+      );
+
+      return {
+        snapshotType,
+        capturedAt: latestCapturedAt,
+        total: toNumber(totalResult.rows[0]?.total_count ?? 0),
+        snapshots: result.rows.map((row) => {
+          return {
+            id: toNumber(row.id),
+            snapshotType: row.snapshot_type,
+            resourceId: row.resource_id,
+            label: row.label,
+            metadata: asRecord(row.metadata),
+            capturedAt: toIsoString(row.captured_at) ?? latestCapturedAt,
+            createdAt: toIsoString(row.created_at) ?? latestCapturedAt,
+          };
+        }),
+      };
+    }
+
+    const latestResult = await options.db.query<{ captured_at: DbTimestamp | null }>(
+      `
+        SELECT MAX(captured_at) AS captured_at
+        FROM automation_snapshots
+        WHERE ${AUTOMATION_SNAPSHOT_TYPE_SQL} = $1
+      `,
+      [snapshotType],
+    );
+
+    const latestCapturedAtRaw = latestResult.rows[0]?.captured_at ?? null;
+    const latestCapturedAt = toIsoString(latestCapturedAtRaw);
+    if (!latestCapturedAtRaw || !latestCapturedAt) {
+      return {
+        snapshotType,
+        capturedAt: null,
+        total: 0,
+        snapshots: [],
+      };
+    }
+
+    const whereClauses = [`${AUTOMATION_SNAPSHOT_TYPE_SQL} = $1`, 'captured_at = $2'];
+    const whereParams: unknown[] = [snapshotType, latestCapturedAtRaw];
+
+    if (search) {
+      whereParams.push(`%${search}%`);
+      whereClauses.push(
+        `(automation_id ILIKE $${whereParams.length} OR COALESCE(NULLIF(alias, ''), '') ILIKE $${whereParams.length} OR COALESCE(metadata->>'blueprintPath', '') ILIKE $${whereParams.length})`,
+      );
+    }
+
+    const totalResult = await options.db.query<{ total_count: string | number }>(
+      `
+        SELECT COUNT(*)::bigint AS total_count
+        FROM automation_snapshots
+        WHERE ${whereClauses.join(' AND ')}
+      `,
+      whereParams,
+    );
+
+    const rowParams = [...whereParams, limit];
+    const result = await options.db.query<DbEnvironmentSnapshotRow>(
+      `
+        SELECT
+          id,
+          ${AUTOMATION_SNAPSHOT_TYPE_SQL} AS snapshot_type,
+          CASE
+            WHEN ${AUTOMATION_SNAPSHOT_TYPE_SQL} = 'blueprint'
+              THEN COALESCE(NULLIF(metadata->>'blueprintPath', ''), automation_id)
+            ELSE automation_id
+          END AS resource_id,
+          alias AS label,
+          metadata,
+          captured_at,
+          created_at
+        FROM automation_snapshots
+        WHERE ${whereClauses.join(' AND ')}
+        ORDER BY COALESCE(NULLIF(alias, ''), automation_id), automation_id
+        LIMIT $${rowParams.length}
+      `,
+      rowParams,
+    );
+
+    return {
+      snapshotType,
+      capturedAt: latestCapturedAt,
+      total: toNumber(totalResult.rows[0]?.total_count ?? 0),
+      snapshots: result.rows.map((row) => {
+        return {
+          id: toNumber(row.id),
+          snapshotType: row.snapshot_type,
+          resourceId: row.resource_id,
+          label: row.label,
+          metadata: asRecord(row.metadata),
+          capturedAt: toIsoString(row.captured_at) ?? latestCapturedAt,
+          createdAt: toIsoString(row.created_at) ?? latestCapturedAt,
+        };
+      }),
+    };
+  });
+
+  app.get('/api/snapshots/entities/current', async (request): Promise<EntitySnapshotsResponse> => {
+    const query = request.query as Record<string, unknown>;
+    const limit = clampLimit(query.limit, 200, 500);
+    const search = asString(query.search);
+    const domain = asString(query.domain);
+
+    const whereClauses: string[] = [];
+    const params: unknown[] = [];
+
+    if (search) {
+      params.push(`%${search}%`);
+      whereClauses.push(`(entity_id ILIKE $${params.length} OR COALESCE(state, '') ILIKE $${params.length})`);
+    }
+
+    if (domain) {
+      params.push(domain);
+      whereClauses.push(`LOWER(COALESCE(domain, '')) = LOWER($${params.length})`);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const totalResult = await options.db.query<{ total_count: string | number }>(
+      `
+        WITH ranked AS (
+          SELECT
+            entity_id,
+            ROW_NUMBER() OVER (PARTITION BY entity_id ORDER BY captured_at DESC, id DESC) AS row_number
+          FROM entity_snapshots
+          ${whereSql}
+        )
+        SELECT COUNT(*)::bigint AS total_count
+        FROM ranked
+        WHERE row_number = 1
+      `,
+      params,
+    );
+
+    const rowParams = [...params, limit];
+    const result = await options.db.query<DbEntitySnapshotRow>(
+      `
+        WITH ranked AS (
+          SELECT
+            id,
+            entity_id,
+            state,
+            domain,
+            attributes,
+            context_id,
+            captured_at,
+            source_event_id,
+            created_at,
+            ROW_NUMBER() OVER (PARTITION BY entity_id ORDER BY captured_at DESC, id DESC) AS row_number
+          FROM entity_snapshots
+          ${whereSql}
+        )
+        SELECT
+          id,
+          entity_id,
+          state,
+          domain,
+          attributes,
+          context_id,
+          captured_at,
+          source_event_id,
+          created_at
+        FROM ranked
+        WHERE row_number = 1
+        ORDER BY captured_at DESC, entity_id ASC
+        LIMIT $${rowParams.length}
+      `,
+      rowParams,
+    );
+
+    let latestCapturedAt: string | null = null;
+    const snapshots = result.rows.map((row) => {
+      const capturedAt = toIsoString(row.captured_at) ?? new Date(0).toISOString();
+      if (!latestCapturedAt || capturedAt > latestCapturedAt) {
+        latestCapturedAt = capturedAt;
+      }
+
+      return {
+        id: toNumber(row.id),
+        entityId: row.entity_id,
+        state: row.state,
+        domain: row.domain,
+        attributes: asRecord(row.attributes),
+        contextId: row.context_id,
+        capturedAt,
+        sourceEventId: row.source_event_id === null ? null : toNumber(row.source_event_id),
+        createdAt: toIsoString(row.created_at) ?? capturedAt,
+      };
+    });
+
+    return {
+      total: toNumber(totalResult.rows[0]?.total_count ?? 0),
+      latestCapturedAt,
+      snapshots,
+    };
   });
 
   app.get('/api/health', async (): Promise<HealthResponse> => {

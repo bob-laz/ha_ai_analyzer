@@ -105,7 +105,12 @@ Proxmox operations (run on VM):
 - Query tool set (`getDailySummary`, `getTopChanges`, `traceContext`, `entityTimeline`, `correlate`, `getAutomationSnapshot`, `listAutomations`, `publishReport`) should remain implemented and contract-stable.
 - `publishReport` should persist to `analysis_results` when a DB client is provided.
 - UI API `/api/*` routes should remain basic-auth protected and LAN-oriented.
+- UI should expose snapshot-inspection API routes for current automation/blueprint/script (`automation_snapshots`), environment inventory (`ha_environment_snapshots`), and entity state history (`entity_snapshots`) via `/api/snapshots/*` for operator troubleshooting.
 - UI manual actions should remain one-shot trigger wrappers (`--once`) for tools jobs.
+- UI manual action execution is server-side and requires `HA_WS_URL`, `HA_TOKEN`, and `OPENAI_API_KEY` in the `ui` service runtime environment.
+- UI events-table filters should remain case-insensitive/trimmed, and payload preview should auto-clear when the selected event is filtered out.
+- UI web layouts should avoid document-level horizontal overflow on narrow/mobile viewports; wide tables/lists must scroll within their local containers instead.
+- Reference Home Assistant API docs when implementing/updating HA REST integrations: https://developers.home-assistant.io/docs/api/rest/
 - LLM analysis runner should remain provider-agnostic (`LLMProvider` interface) with OpenAI as current concrete provider.
 - LLM recommendations are propose-only; never auto-apply automation changes.
 - LLM analysis input should include latest Home Assistant environment snapshot context (devices/services/integrations/addons) from `ha_environment_snapshots` when available.
@@ -140,6 +145,7 @@ Proxmox operations (run on VM):
 - `dev:collector --mode=...` should auto-start daily home summary scheduler by default (disable with `DAILY_SUMMARY_AUTOSTART=false`).
 - Automation snapshot sync should run once immediately on scheduler startup, then on schedule.
 - Automation snapshot sync should capture `automation`, `script`, `scene`, and blueprint context rows in `automation_snapshots` (blueprints included when discoverable from entity config and/or HA blueprint listing endpoints).
+- Automation snapshot sync should capture current Home Assistant entity states into `entity_snapshots` for UI entity-state inspection.
 - Automation snapshot sync should also capture Home Assistant environment inventory rows (`device`, `service`, `integration`, `addon`) in `ha_environment_snapshots`.
 - Automation snapshot sync should capture utility/resource usage sensor readings into `ha_usage_snapshots`.
 - `dev:down` should include `debug`, `dev-ha`, `analytics`, and `ui` profiles to prevent stale in-use compose network errors during teardown.

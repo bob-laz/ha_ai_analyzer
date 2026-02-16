@@ -105,6 +105,10 @@ services:
       UI_HOST: 0.0.0.0
       UI_PORT: ${UI_PORT:-5080}
       UI_PORT_BIND: ${UI_PORT_BIND:-5080}
+      HA_WS_URL: ${HA_WS_URL:-ws://homeassistant.local:8123/api/websocket}
+      HA_HTTP_URL: ${HA_HTTP_URL:-}
+      HA_TOKEN: ${HA_TOKEN:-replace-me}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       UI_BASIC_AUTH_USERNAME: ${UI_BASIC_AUTH_USERNAME:-operator}
       UI_BASIC_AUTH_PASSWORD: ${UI_BASIC_AUTH_PASSWORD:-operator}
       UI_ACTION_STATUS_TTL_SECONDS: ${UI_ACTION_STATUS_TTL_SECONDS:-900}

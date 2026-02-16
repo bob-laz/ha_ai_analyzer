@@ -55,11 +55,17 @@ This project has three runtime components:
 
 - Collector (`@ha-ai/collector`): subscribes to Home Assistant websocket events and ingests normalized records into Postgres.
 - Tools (`@ha-ai/tools`): provides query tools (summary, top changes, context tracing, timelines, correlations, automation snapshots/listing) and an LLM analysis job that writes `agent_runs`, `insights`, `evidence`, `recommendations`, and `analysis_results`.
-  - includes an automation snapshot sync scheduler for `automation`, `script`, `scene`, blueprint context rows, and Home Assistant environment inventory rows (`device`, `service`, `integration`, `addon`) captured into `ha_environment_snapshots`.
+  - includes an automation snapshot sync scheduler where `automation`, `script`, `scene`, and blueprint context rows are captured into `automation_snapshots`.
+  - captures current Home Assistant entity states into `entity_snapshots` for UI entity-state inspection.
+  - Home Assistant environment inventory rows (`device`, `service`, `integration`, `addon`) are captured into `ha_environment_snapshots`.
   - utility usage snapshots (`energy`, `water`, `gas`, `power`) are captured into `ha_usage_snapshots` and passed into analysis agents.
   - analytics runs can publish a Home Assistant `persistent_notification` with a human-readable summary for each completed LLM analysis pass.
   - includes a separate daily-home-summary agent that compares daily activity to prior days, flags anomalies, persists a report, and posts a Home Assistant notification.
 - UI (`@ha-ai/ui`): LAN-only operator console served by Fastify + React for health visibility, runs/recommendation triage, report/event views, and manual one-shot action triggers.
+  - UI-triggered manual actions run on the server side and require `HA_WS_URL`, `HA_TOKEN`, and (for LLM runs) `OPENAI_API_KEY` in the `ui` service environment.
+  - Events table filters are case-insensitive and trimmed, and payload preview closes automatically when a selected row is filtered out.
+  - Table-heavy routes should remain mobile-safe: avoid page-level horizontal overflow and keep wide content scrollable inside route-local containers.
+  - Snapshot Explorer route (`/snapshots`) provides direct visibility into latest automation, blueprint, script, and entity snapshot state from Postgres.
 
 Collector ingest defaults include noise suppression for Home Assistant event spam:
 - drop `state_changed` records where `old_state.state` equals `new_state.state`

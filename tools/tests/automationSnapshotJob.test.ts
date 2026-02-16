@@ -16,7 +16,7 @@ type QueryCall = {
 const createConfig = (): AutomationSnapshotConfig => ({
   databaseUrl: 'postgresql://ha_ai:ha_ai_dev_password@localhost:5432/ha_ai',
   haHttpUrl: 'http://ha.local:8123',
-  haWsUrl: 'ws://ha.local:8123/api/websocket',
+  haWsUrl: 'ws://127.0.0.1:1/api/websocket',
   haToken: 'token',
   timezone: 'UTC',
   scheduleTime: { hour: 3, minute: 15 },
@@ -117,7 +117,7 @@ describe('runAutomationSnapshotPass', () => {
         );
       }
 
-      if (url.endsWith('/api/config/automation/config/automation.kitchen_lights')) {
+      if (url.endsWith('/api/config/automation/config/kitchen_lights')) {
         return new Response(
           JSON.stringify({
             trigger: [{ platform: 'state' }],
@@ -129,7 +129,7 @@ describe('runAutomationSnapshotPass', () => {
         );
       }
 
-      if (url.endsWith('/api/config/script/config/script.goodnight')) {
+      if (url.endsWith('/api/config/script/config/goodnight')) {
         return new Response(
           JSON.stringify({
             action: [{ service: 'light.turn_off' }],
@@ -138,7 +138,7 @@ describe('runAutomationSnapshotPass', () => {
         );
       }
 
-      if (url.endsWith('/api/config/scene/config/scene.relax')) {
+      if (url.endsWith('/api/config/scene/config/relax')) {
         return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
 
@@ -158,6 +158,7 @@ describe('runAutomationSnapshotPass', () => {
     const stats = await runAutomationSnapshotPass(createPool(calls), createConfig());
 
     expect(stats.trackedEntities).toBe(3);
+    expect(stats.entityRowsInserted).toBe(6);
     expect(stats.insertedRows).toBe(4); // automation + script + scene + blueprint
     expect(stats.blueprintRowsInserted).toBe(1);
     expect(stats.configFetches).toBe(3);
@@ -204,6 +205,7 @@ describe('runAutomationSnapshotPass', () => {
     const stats = await runAutomationSnapshotPass(createPool(calls), createConfig());
 
     expect(stats.trackedEntities).toBe(1);
+    expect(stats.entityRowsInserted).toBe(1);
     expect(stats.insertedRows).toBe(1);
     expect(stats.configFetches).toBe(1);
     expect(stats.configFetchFailures).toBe(1);

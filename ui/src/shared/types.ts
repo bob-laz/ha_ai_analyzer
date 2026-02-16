@@ -135,6 +135,70 @@ export type ResourceUsageResponse = {
   byType: Record<'energy' | 'water' | 'gas' | 'power', ResourceUsageReading[]>;
 };
 
+export type AutomationSnapshotRow = {
+  id: number;
+  automationId: string;
+  alias: string | null;
+  isEnabled: boolean | null;
+  triggerConfig: unknown[];
+  actionConfig: unknown[];
+  conditionsConfig: unknown[];
+  metadata: Record<string, unknown>;
+  capturedAt: string;
+  createdAt: string;
+};
+
+export type AutomationSnapshotsResponse = {
+  capturedAt: string | null;
+  total: number;
+  snapshots: AutomationSnapshotRow[];
+};
+
+export type EnvironmentSnapshotType =
+  | 'automation'
+  | 'script'
+  | 'scene'
+  | 'blueprint'
+  | 'device'
+  | 'service'
+  | 'integration'
+  | 'addon';
+
+export type EnvironmentSnapshotRow = {
+  id: number;
+  snapshotType: EnvironmentSnapshotType | string;
+  resourceId: string;
+  label: string | null;
+  metadata: Record<string, unknown>;
+  capturedAt: string;
+  createdAt: string;
+};
+
+export type EnvironmentSnapshotsResponse = {
+  snapshotType: EnvironmentSnapshotType | string;
+  capturedAt: string | null;
+  total: number;
+  snapshots: EnvironmentSnapshotRow[];
+};
+
+export type EntitySnapshotRow = {
+  id: number;
+  entityId: string;
+  state: string | null;
+  domain: string | null;
+  attributes: Record<string, unknown>;
+  contextId: string | null;
+  capturedAt: string;
+  sourceEventId: number | null;
+  createdAt: string;
+};
+
+export type EntitySnapshotsResponse = {
+  total: number;
+  latestCapturedAt: string | null;
+  snapshots: EntitySnapshotRow[];
+};
+
 export type HealthResponse = {
   ok: boolean;
   serverTime: string;
