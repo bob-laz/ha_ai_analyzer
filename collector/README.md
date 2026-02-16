@@ -6,18 +6,28 @@ Home Assistant websocket ingestion service.
 
 ```mermaid
 flowchart TD
-  HA["Home Assistant WebSocket API"] --> HC["haClient.ts<br/>auth + subscribe + reconnect"]
-  HC --> N["normalize.ts<br/>entity/service/context normalization"]
-  N --> F["filters.ts<br/>event type + domain + noise filters"]
-  F --> D["db.ts<br/>batch buffer + flush loop"]
-  D --> PG["Postgres events table<br/>partitioned by event_time"]
+  HA["Home Assistant WebSocket API"]
+  CFG["config.ts<br/>env parsing + defaults"]
+  HC["haClient.ts<br/>auth + subscribe + reconnect"]
+  ACK["Ack correlation by message id<br/>result/event frame handling"]
+  N["normalize.ts<br/>entity/service/context extraction"]
+  F["filters.ts<br/>allow/exclude + noise suppression"]
+  B["db.ts buffer<br/>batch queue + backpressure policy"]
+  FLUSH["Periodic flush + shutdown flush"]
+  PG["Postgres events<br/>partitioned by event_time"]
 
-  CFG["config.ts<br/>env parsing + defaults"] --> HC
+  CFG --> HC
   CFG --> F
-  CFG --> D
+  CFG --> B
+  HA --> HC
+  HC --> ACK
+  ACK --> N
+  N --> F
+  F --> B
+  B --> FLUSH
+  FLUSH -->|"INSERT ... ON CONFLICT DO NOTHING"| PG
 
-  SIG["process signals<br/>SIGINT/SIGTERM"] --> D
-  D -->|"final flush"| PG
+  SIG["SIGINT/SIGTERM"] -->|"graceful drain"| FLUSH
 ```
 
 ## Responsibilities

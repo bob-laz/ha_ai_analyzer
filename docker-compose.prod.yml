@@ -169,6 +169,28 @@ services:
       DAILY_SUMMARY_NOTIFICATION_REQUEST_TIMEOUT_MS: ${DAILY_SUMMARY_NOTIFICATION_REQUEST_TIMEOUT_MS:-10000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
 
+  ui:
+    image: *app_image
+    container_name: ha_ai_ui
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["yarn", "workspace", "@ha-ai/ui", "start:ui"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ha_ai}:${POSTGRES_PASSWORD:-ha_ai_dev_password}@postgres:5432/${POSTGRES_DB:-ha_ai}
+      UI_HOST: 0.0.0.0
+      UI_PORT: ${UI_PORT:-5080}
+      UI_BASIC_AUTH_USERNAME: ${UI_BASIC_AUTH_USERNAME:?UI_BASIC_AUTH_USERNAME is required}
+      UI_BASIC_AUTH_PASSWORD: ${UI_BASIC_AUTH_PASSWORD:?UI_BASIC_AUTH_PASSWORD is required}
+      UI_ACTION_STATUS_TTL_SECONDS: ${UI_ACTION_STATUS_TTL_SECONDS:-900}
+      UI_DEFAULT_POLL_INTERVAL_MS: ${UI_DEFAULT_POLL_INTERVAL_MS:-10000}
+      UI_BUILD_VERSION: ${IMAGE_TAG:-main-latest}
+      UI_WORKSPACE_ROOT: /app
+      UI_YARN_BIN: yarn
+    ports:
+      - "${UI_PORT_BIND:-5080}:${UI_PORT:-5080}"
+
   pgadmin:
     image: dpage/pgadmin4:9
     container_name: ha_ai_pgadmin

@@ -10,6 +10,8 @@ APP_DIR="${APP_DIR:-/opt/ha-ai/app}"
 STATE_DIR="${STATE_DIR:-/opt/ha-ai/state}"
 BACKUP_DIR="${BACKUP_DIR:-/opt/ha-ai/backups}"
 LAN_CIDR="${LAN_CIDR:-192.168.0.0/16}"
+PGADMIN_LAN_PORT="${PGADMIN_LAN_PORT:-5050}"
+UI_LAN_PORT="${UI_LAN_PORT:-5080}"
 APP_OWNER="${APP_OWNER:-${SUDO_USER:-root}}"
 
 if [[ -f /etc/os-release ]]; then
@@ -52,7 +54,8 @@ echo "Configuring firewall (UFW)..."
 ufw --force default deny incoming
 ufw --force default allow outgoing
 ufw allow OpenSSH
-ufw allow from "$LAN_CIDR" to any port 5050 proto tcp
+ufw allow from "$LAN_CIDR" to any port "$PGADMIN_LAN_PORT" proto tcp
+ufw allow from "$LAN_CIDR" to any port "$UI_LAN_PORT" proto tcp
 ufw --force enable
 
 echo "Installing helper commands..."

@@ -15,6 +15,6 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 echo "Stopping local services and removing volumes for all local dev profiles..."
-docker compose --profile debug --profile dev-ha --profile analytics down -v --remove-orphans
+docker compose --profile debug --profile dev-ha --profile analytics --profile ui down -v --remove-orphans
 
 echo "Local compose stack torn down."
