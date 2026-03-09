@@ -10,7 +10,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "pg": "^8.19.0",
+    "pg": "^8.20.0",
     "ws": "^8.19.0",
     "zod": "^4.3.6"
   },
