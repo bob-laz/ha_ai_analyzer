@@ -196,7 +196,7 @@ services:
       - "${UI_PORT_BIND:-5080}:${UI_PORT:-5080}"
 
   pgadmin:
-    image: dpage/pgadmin4:9
+    image: dpage/pgadmin4:2026-06-16-1
     container_name: ha_ai_pgadmin
     restart: unless-stopped
     depends_on:
